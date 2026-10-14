@@ -1,17 +1,20 @@
 # Architecture
 
-news-mcp is a single Go `main` package of about 2,500 lines (plus tests): one binary, no database, no background workers. This page explains how it is organised and why.
+news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no database, no background workers. Following the usual layout of Go MCP servers, `cmd/` holds the entry point and `internal/` one package per concern. This page explains how it is organised and why.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `main.go` | Configuration loading (`loadConfig`), HTTP routing (`buildHandler`), server startup and shutdown (`run`), access log |
-| `tools.go` | The nine MCP tools: input/output types, validation, error mapping (`mapErr`), HTML-to-text and truncation helpers |
-| `newsclient.go` | Nextcloud News API v1-3 client: one method per endpoint, credential selection, response size limit |
-| `oauth.go` | Standalone mode: the embedded OAuth 2.1 authorization server (metadata, `/register`, `/authorize`, `/token`, token verification) |
-| `oidc.go` | OIDC mode: discovery, JWKS cache, JWT validation middleware, RFC 8693 token exchange with cache |
-| `*_test.go` | Unit and end-to-end tests against in-process fake Nextcloud and fake identity provider servers |
+| `cmd/news-mcp` | Entry point (`run`): configuration, HTTP server, signals and graceful shutdown, memory limit, `version` |
+| `internal/config` | Configuration loading and validation from the environment (`config.Load`) |
+| `internal/server` | HTTP routing (`server.NewHandler`): MCP server, authentication layer, discovery documents |
+| `internal/tools` | The nine MCP tools: input/output types, validation, error mapping (`mapErr`), HTML-to-text and truncation helpers |
+| `internal/nextcloud` | Nextcloud News API v1-3 client: one method per endpoint, credential selection, response size limit |
+| `internal/standalone` | Standalone mode: the embedded OAuth 2.1 authorization server (metadata, `/register`, `/authorize`, `/token`, token verification) |
+| `internal/oidc` | OIDC mode: discovery, JWKS cache, JWT validation middleware, RFC 8693 token exchange with cache |
+| `internal/httpx` | Small HTTP helpers: bearer token parsing, access log, loopback check |
+| `internal/nextcloud/nextcloudtest`, `internal/oidc/oidctest` | In-process fake Nextcloud News API and fake identity provider, shared by the tests |
 | `docs/` | This documentation |
 | `Dockerfile`, `.dockerignore` | Multi-stage, cross-compiling image build on `distroless/static` |
 | `.github/workflows/ci.yml` | GitHub: tests, then multi-arch image to GHCR |
@@ -24,15 +27,15 @@ news-mcp is a single Go `main` package of about 2,500 lines (plus tests): one bi
 flowchart TB
     client([MCP client])
     subgraph news-mcp
-        mux["HTTP mux + access log<br/>(main.go)"]
+        mux["HTTP mux + access log<br/>(server, httpx)"]
         subgraph auth [authentication layer]
-            sa["Standalone: AuthServer<br/>+ SDK RequireBearerToken<br/>(oauth.go)"]
-            oi["OIDC: JWT middleware<br/>(oidc.go)"]
+            sa["Standalone: authorization server<br/>+ SDK RequireBearerToken<br/>(standalone)"]
+            oi["OIDC: JWT middleware<br/>(oidc)"]
         end
         sdk["SDK StreamableHTTPHandler<br/>+ mcp.Server"]
         ex["ExchangeMiddleware<br/>(OIDC only)"]
-        tools["Tool handlers<br/>(tools.go)"]
-        nc["NewsClient<br/>(newsclient.go)"]
+        tools["Tool handlers<br/>(tools)"]
+        nc["Nextcloud client<br/>(nextcloud)"]
     end
     idp([OIDC provider])
     nextcloud([Nextcloud News API])
@@ -42,7 +45,7 @@ flowchart TB
     ex -. "token exchange (lazy)" .-> idp
 ```
 
-`buildHandler` assembles this chain once at startup. Exactly one of the two authentication layers is mounted, depending on `MCP_AUTH_MODE`. The MCP protocol itself (sessions, JSON-RPC, SSE, tool schemas) is handled by the official [Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk).
+`server.NewHandler` assembles this chain once at startup. Exactly one of the two authentication layers is mounted, depending on `MCP_AUTH_MODE`. The MCP protocol itself (sessions, JSON-RPC, SSE, tool schemas) is handled by the official [Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk).
 
 ## Life of a tool call
 
@@ -53,7 +56,7 @@ sequenceDiagram
     participant S as SDK (mcp.Server)
     participant X as ExchangeMiddleware
     participant T as Tool handler
-    participant N as NewsClient
+    participant N as nextcloud.Client
     participant NC as Nextcloud
 
     C->>A: POST /mcp tools/call news_list_items
@@ -76,11 +79,11 @@ Errors flow back through `mapErr`, which turns client errors into short, actiona
 
 ### Credential selection
 
-`NewsClient` holds no per-user state. Each call decides how to authenticate from its `context.Context`:
+`nextcloud.Client` holds no per-user state. Each call decides how to authenticate from its `context.Context`:
 
 ```mermaid
 flowchart TD
-    A["NewsClient.do(ctx)"] --> B{TokenSource in ctx?}
+    A["Client.do(ctx)"] --> B{TokenSource in ctx?}
     B -- yes --> C["src(ctx): exchange or cache hit"]
     C -- error --> E1[ErrTokenExchange]
     C -- token --> D[Authorization: Bearer token]
@@ -124,17 +127,21 @@ go vet ./...
 go test ./...
 ```
 
-| Test file | Covers |
+| Package | Covers |
 |---|---|
-| `newsclient_test.go` | Every client method against a fake Nextcloud (`httptest`): query strings, request bodies, 401/404/500 mapping, no password in errors |
-| `oauth_test.go` | Standalone end to end: registration, consent page, PKCE, code replay, refresh, MCP session, discovery routes, resource matching |
-| `oidc_test.go` | OIDC: configuration validation, JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, token exchange and its cache, end-to-end with two users, no secrets in logs |
+| `internal/nextcloud` | Every client method against a fake Nextcloud (`nextcloudtest`): query strings, request bodies, 401/404/500 mapping, no password in errors, credential selection from the context |
+| `internal/tools` | HTML-to-text and truncation helpers |
+| `internal/standalone` | Standalone end to end: registration, consent, PKCE, code replay, refresh, MCP session with tool calls; resource matching |
+| `internal/oidc` | JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, discovery issuer mismatch, token exchange and its bounded cache |
+| `internal/config` | Configuration validation for both authentication modes |
+| `internal/server` | Discovery routes and consent page; OIDC end to end with two users through the real handler, no secrets in logs |
+| `internal/httpx` | Bearer token parsing |
 
 All tests run in-process in well under a second, without network access.
 
 ## Build and release
 
-- **Binary.** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=…"` produces a static binary of about 11 MB.
+- **Binary.** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=…" ./cmd/news-mcp` produces a static binary of about 11 MB.
 - **Image.** The `Dockerfile` builds on the native platform and cross-compiles with `GOOS`/`GOARCH`, so multi-arch images need no emulation. The final stage is `gcr.io/distroless/static-debian12:nonroot`.
 - **CI.**
   - GitHub Actions runs gofmt, vet, tests and a build on every push and pull request.
