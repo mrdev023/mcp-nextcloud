@@ -1,5 +1,8 @@
 # mcp-nextcloud-news
 
+> [!WARNING]
+> **Work in progress — do not use in production.** This is a personal project under active development: its configuration, tools and behaviour can change at any time without notice. It is provided as is, without any warranty (see the [license](LICENSE)); I accept no responsibility for any damage, data loss or security issue resulting from its use. If you run it anyway, do so at your own risk.
+
 An [MCP](https://modelcontextprotocol.io) server, written in Go, that exposes a [Nextcloud News](https://apps.nextcloud.com/apps/news) account to MCP clients (Claude Code, Claude Desktop, Cursor, …). It lets them browse feeds and articles, read full text, and manage read / unread and starred state.
 
 - **Transport.** Streamable HTTP on `/mcp`.
@@ -16,6 +19,8 @@ flowchart LR
 ```
 
 **Real-world use.** I run news-mcp in [OIDC mode](docs/oidc.md#behind-an-mcp-gateway) behind [agentgateway](https://agentgateway.dev), with Keycloak as the identity provider. My AI agent uses it to read the unread RSS articles, write a summary of them, and mark them as read.
+
+This is also how the project is tested: I test it continuously on my own infrastructure, with that agent as its real user. That covers one personal setup only, and is no guarantee that it works elsewhere.
 
 ## Quick start
 
