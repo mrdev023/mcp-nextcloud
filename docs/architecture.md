@@ -9,12 +9,14 @@ news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no databa
 | `cmd/news-mcp` | Entry point (`run`): configuration, HTTP server, signals and graceful shutdown, memory limit, `version` |
 | `internal/config` | Configuration loading and validation from the environment (`config.Load`) |
 | `internal/server` | HTTP routing (`server.NewHandler`): MCP server, authentication layer, discovery documents |
-| `internal/tools` | The nine MCP tools: input/output types, validation, error mapping (`mapErr`), HTML-to-text and truncation helpers |
-| `internal/nextcloud` | Nextcloud News API v1-3 client: one method per endpoint, credential selection, response size limit |
+| `internal/nextcloud` | Core Nextcloud client shared by every app module (`Client.Do`): credential selection, request building, response size limit, 401/404/error mapping |
+| `internal/nextcloud/news` | News API v1-3 on top of the core client: types, one method per endpoint |
+| `internal/tools` | Core of the MCP tools: registry (`Toolset`, `New`, `Register`), effects and the annotations derived from them, read-only filter, shared error messages (`MapErr`) |
+| `internal/tools/news` | The nine `news_*` tools: input/output types, validation, HTML-to-text and truncation helpers |
 | `internal/standalone` | Standalone mode: the embedded OAuth 2.1 authorization server (metadata, `/register`, `/authorize`, `/token`, token verification) |
 | `internal/oidc` | OIDC mode: JWT validation with go-oidc behind a rate-limited JWKS cache, 401/403 middleware, RFC 8693 token exchange with cache |
 | `internal/httpx` | Small HTTP helpers: bearer token parsing, access log, loopback check |
-| `internal/nextcloud/nextcloudtest`, `internal/oidc/oidctest` | In-process fake Nextcloud News API and fake identity provider, shared by the tests |
+| `internal/nextcloud/nextcloudtest`, `internal/oidc/oidctest` | In-process fake Nextcloud app API and fake identity provider, shared by the tests |
 | `docs/` | This documentation |
 | `Dockerfile`, `.dockerignore` | Multi-stage, cross-compiling image build on `distroless/static` |
 | `.github/workflows/ci.yml` | GitHub: tests, then multi-arch image to GHCR |
@@ -34,8 +36,8 @@ flowchart TB
         end
         sdk["SDK StreamableHTTPHandler<br/>+ mcp.Server"]
         ex["ExchangeMiddleware<br/>(OIDC only)"]
-        tools["Tool handlers<br/>(tools)"]
-        nc["Nextcloud client<br/>(nextcloud)"]
+        tools["Tool handlers<br/>(tools/news)"]
+        nc["News API (nextcloud/news)<br/>on the core client (nextcloud)"]
     end
     idp([OIDC provider])
     nextcloud([Nextcloud News API])
@@ -56,7 +58,7 @@ sequenceDiagram
     participant S as SDK (mcp.Server)
     participant X as ExchangeMiddleware
     participant T as Tool handler
-    participant N as nextcloud.Client
+    participant N as news.Client + nextcloud.Client
     participant NC as Nextcloud
 
     C->>A: POST /mcp tools/call news_list_items
@@ -75,15 +77,15 @@ sequenceDiagram
     S-->>C: tool result
 ```
 
-Errors flow back through `mapErr`, which turns client errors into short, actionable messages: wrong credentials, item not found, token exchange refused, timeout. Raw responses are never echoed.
+Errors flow back through `tools.MapErr`, shared by every module, which turns client errors into short, actionable messages: wrong credentials, item not found, token exchange refused, timeout. Raw responses are never echoed.
 
 ### Credential selection
 
-`nextcloud.Client` holds no per-user state. Each call decides how to authenticate from its `context.Context`:
+`nextcloud.Client` is the one transport of every app module and holds no per-user state. Each call decides how to authenticate from its `context.Context`:
 
 ```mermaid
 flowchart TD
-    A["Client.do(ctx)"] --> B{TokenSource in ctx?}
+    A["Client.Do(ctx)"] --> B{TokenSource in ctx?}
     B -- yes --> C["src(ctx): exchange or cache hit"]
     C -- error --> E1[ErrTokenExchange]
     C -- token --> D[Authorization: Bearer token]
@@ -96,6 +98,16 @@ flowchart TD
 ```
 
 Because credentials travel in the request context, a token can never leak from one user's request into another's.
+
+## Adding a Nextcloud app
+
+Each app is a module in two packages; authentication, transport and the tool registry are shared:
+
+1. **API client** in `internal/nextcloud/<app>`: an `APIPath` constant, the app's types, and a `Client` wrapping `*nextcloud.Client` whose methods call `Do` with paths below `APIPath`. Test it against `nextcloudtest.NewServer(t, APIPath, routes)`.
+2. **Tools** in `internal/tools/<app>`: an `API` interface listing the client methods the tools use, the handlers, and a `Toolset(api)` function declaring each tool with `tools.New` and its effect (`tools.ReadOnly`, `tools.Reversible` or `tools.Destructive`). Wrap client errors with `tools.MapErr`.
+3. **Wiring**: add `<app>tools.Toolset(<app>.New(nc))` to the `tools.Register` call in `internal/server`.
+
+`MCP_READ_ONLY` and the annotations then apply to the new tools with no extra code. Each module keeps its own schema snapshots.
 
 ## Design choices
 
@@ -130,8 +142,10 @@ go test ./...
 
 | Package | Covers |
 |---|---|
-| `internal/nextcloud` | Every client method against a fake Nextcloud (`nextcloudtest`): query strings, request bodies, 401/404/500 mapping, no password in errors, credential selection from the context |
-| `internal/tools` | Every tool through an in-memory MCP session and a fake client: parameters, validation, paging, error messages, annotations; schema snapshots in `testdata/toolsnaps` |
+| `internal/nextcloud` | Credential selection from the context (token source, app-password, none) |
+| `internal/nextcloud/news` | Every News method against a fake Nextcloud (`nextcloudtest`): query strings, request bodies, 401/404/500 mapping, no password in errors |
+| `internal/tools` | Registry: read-only filter, annotations derived from effects; shared error messages |
+| `internal/tools/news` | Every tool through an in-memory MCP session and a fake client: parameters, validation, paging, error messages, annotations; schema snapshots in `testdata/toolsnaps` |
 | `internal/standalone` | Standalone end to end: registration, consent, PKCE, code replay, refresh, MCP session with tool calls; resource matching |
 | `internal/oidc` | JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, JWKS refresh rate limit, discovery issuer mismatch, token exchange and its bounded cache |
 | `internal/config` | Configuration validation for both authentication modes |
@@ -143,7 +157,7 @@ All tests run in-process in well under a second, without network access.
 The JSON schemas the tools expose are pinned by snapshots. After an intended change to a tool (description, input or output struct tags), regenerate them and review the diff:
 
 ```sh
-go test ./internal/tools -run TestToolSnapshots -update
+go test ./internal/tools/news -run TestToolSnapshots -update
 ```
 
 ## Build and release

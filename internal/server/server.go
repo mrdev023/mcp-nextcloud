@@ -15,9 +15,11 @@ import (
 	"github.com/mrdev023/mcp-nextcloud-news/internal/config"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/httpx"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/standalone"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
+	newstools "github.com/mrdev023/mcp-nextcloud-news/internal/tools/news"
 )
 
 // NewHandler wires the MCP server, the authentication layer selected by
@@ -40,7 +42,9 @@ func NewHandler(cfg *config.Config, version string, log *slog.Logger, nc *nextcl
 	if idp != nil {
 		server.AddReceivingMiddleware(idp.ExchangeMiddleware())
 	}
-	tools.Register(server, nc, tools.Options{ReadOnly: cfg.ReadOnly})
+	tools.Register(server, tools.Options{ReadOnly: cfg.ReadOnly},
+		newstools.Toolset(news.New(nc)),
+	)
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Logger:         log,

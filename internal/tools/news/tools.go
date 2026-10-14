@@ -1,5 +1,6 @@
-// Package tools defines the MCP tools exposed by news-mcp.
-package tools
+// Package news defines the news_* MCP tools, on top of the Nextcloud News API
+// client (nextcloud/news).
+package news
 
 import (
 	"cmp"
@@ -15,7 +16,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	newsapi "github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
 const (
@@ -139,14 +141,14 @@ type GetUpdatedIn struct {
 
 // ---------- registration ----------
 
-// NewsAPI is the part of the Nextcloud News client the tools use. It is
+// API is the part of the Nextcloud News client the tools use. It is
 // declared here, by its consumer, so tests can substitute an in-memory fake.
-type NewsAPI interface {
-	ListFeeds(ctx context.Context) (*nextcloud.FeedsResponse, error)
-	ListFolders(ctx context.Context) ([]nextcloud.Folder, error)
-	ListItems(ctx context.Context, p nextcloud.ListItemsParams) ([]nextcloud.Item, error)
-	GetItem(ctx context.Context, id int64) (*nextcloud.Item, error)
-	GetUpdated(ctx context.Context, lastModified int64, t nextcloud.ItemType, id int64) ([]nextcloud.Item, error)
+type API interface {
+	ListFeeds(ctx context.Context) (*newsapi.FeedsResponse, error)
+	ListFolders(ctx context.Context) ([]newsapi.Folder, error)
+	ListItems(ctx context.Context, p newsapi.ListItemsParams) ([]newsapi.Item, error)
+	GetItem(ctx context.Context, id int64) (*newsapi.Item, error)
+	GetUpdated(ctx context.Context, lastModified int64, t newsapi.ItemType, id int64) ([]newsapi.Item, error)
 	MarkRead(ctx context.Context, ids ...int64) error
 	MarkUnread(ctx context.Context, ids ...int64) error
 	MarkAllRead(ctx context.Context, newestItemID int64) error
@@ -154,38 +156,19 @@ type NewsAPI interface {
 	Unstar(ctx context.Context, id int64) error
 }
 
-var _ NewsAPI = (*nextcloud.Client)(nil)
+var _ API = (*newsapi.Client)(nil)
 
-type handlers struct{ nc NewsAPI }
-
-// mapErr turns client errors into clean, user-facing tool errors.
-func mapErr(err error, what string) error {
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, nextcloud.ErrUnauthorized):
-		return errors.New("Nextcloud authentication failed: Nextcloud rejected the credentials (app-password or exchanged token)") //nolint:staticcheck // user-facing, starts with a product name
-	case errors.Is(err, nextcloud.ErrNoCredentials):
-		return errors.New("missing Nextcloud credentials for this request")
-	case errors.Is(err, nextcloud.ErrTokenExchange):
-		return fmt.Errorf("could not obtain a Nextcloud token from the identity provider (%w)", err)
-	case errors.Is(err, nextcloud.ErrNotFound):
-		return fmt.Errorf("%s not found", what)
-	case errors.Is(err, context.DeadlineExceeded):
-		return errors.New("Nextcloud did not answer in time") //nolint:staticcheck // user-facing, starts with a product name
-	}
-	return err
-}
+type handlers struct{ nc API }
 
 func (t *handlers) listFeeds(ctx context.Context, _ *mcp.CallToolRequest, _ ListFeedsIn) (*mcp.CallToolResult, ListFeedsOut, error) {
 	var out ListFeedsOut
 	fr, err := t.nc.ListFeeds(ctx)
 	if err != nil {
-		return nil, out, mapErr(err, "feeds")
+		return nil, out, tools.MapErr(err, "feeds")
 	}
 	folders, err := t.nc.ListFolders(ctx)
 	if err != nil {
-		return nil, out, mapErr(err, "folders")
+		return nil, out, tools.MapErr(err, "folders")
 	}
 	out.Feeds = make([]FeedOut, 0, len(fr.Feeds))
 	for _, f := range fr.Feeds {
@@ -218,8 +201,8 @@ func (t *handlers) listItems(ctx context.Context, _ *mcp.CallToolRequest, in Lis
 		return nil, out, errors.New("offset must be >= 0")
 	}
 	limit := clamp(in.Limit, defaultListLimit, maxListLimit)
-	p := nextcloud.ListItemsParams{
-		Type:        nextcloud.TypeAll,
+	p := newsapi.ListItemsParams{
+		Type:        newsapi.TypeAll,
 		GetRead:     in.IncludeRead,
 		BatchSize:   limit,
 		Offset:      in.Offset,
@@ -229,11 +212,11 @@ func (t *handlers) listItems(ctx context.Context, _ *mcp.CallToolRequest, in Lis
 	var scoped bool
 	p.Type, p.ID, scoped = scope(in.FeedID, in.FolderID)
 	if !scoped && in.StarredOnly {
-		p.Type = nextcloud.TypeStarred
+		p.Type = newsapi.TypeStarred
 	}
 	items, err := t.nc.ListItems(ctx, p)
 	if err != nil {
-		return nil, out, mapErr(err, "feed or folder")
+		return nil, out, tools.MapErr(err, "feed or folder")
 	}
 	if len(items) == limit {
 		out.NextOffset = items[len(items)-1].ID
@@ -250,7 +233,7 @@ func (t *handlers) listItems(ctx context.Context, _ *mcp.CallToolRequest, in Lis
 }
 
 // matches is a local safety net for News versions that ignore `search`.
-func matches(it *nextcloud.Item, terms []string) bool {
+func matches(it *newsapi.Item, terms []string) bool {
 	hay := strings.ToLower(it.Title + " " + it.Author + " " + it.Body)
 	for _, t := range terms {
 		if !strings.Contains(hay, t) {
@@ -262,14 +245,14 @@ func matches(it *nextcloud.Item, terms []string) bool {
 
 // scope maps the feedId / folderId filters to a News API item type and id.
 // feedId wins over folderId; scoped is false when neither is set.
-func scope(feedID, folderID *int64) (typ nextcloud.ItemType, id int64, scoped bool) {
+func scope(feedID, folderID *int64) (typ newsapi.ItemType, id int64, scoped bool) {
 	switch {
 	case feedID != nil:
-		return nextcloud.TypeFeed, *feedID, true
+		return newsapi.TypeFeed, *feedID, true
 	case folderID != nil:
-		return nextcloud.TypeFolder, *folderID, true
+		return newsapi.TypeFolder, *folderID, true
 	}
-	return nextcloud.TypeAll, 0, false
+	return newsapi.TypeAll, 0, false
 }
 
 func positiveID(id int64) error {
@@ -289,7 +272,7 @@ func (t *handlers) getItem(ctx context.Context, _ *mcp.CallToolRequest, in GetIt
 	}
 	it, err := t.nc.GetItem(ctx, in.ID)
 	if err != nil {
-		return nil, ItemOut{}, mapErr(err, fmt.Sprintf("item %d", in.ID))
+		return nil, ItemOut{}, tools.MapErr(err, fmt.Sprintf("item %d", in.ID))
 	}
 	bodyChars := clamp(in.MaxBodyChars, defaultBodyChars, maxBodyChars)
 	out := toItemOut(it, false, 0)
@@ -323,9 +306,9 @@ func collectIDs(in IDsIn) ([]int64, error) {
 
 // setRead returns the handler of news_mark_read (read) or news_mark_unread.
 func (t *handlers) setRead(read bool) mcp.ToolHandlerFor[IDsIn, ActionOut] {
-	apply, state := NewsAPI.MarkUnread, "unread"
+	apply, state := API.MarkUnread, "unread"
 	if read {
-		apply, state = NewsAPI.MarkRead, "read"
+		apply, state = API.MarkRead, "read"
 	}
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) (*mcp.CallToolResult, ActionOut, error) {
 		ids, err := collectIDs(in)
@@ -333,7 +316,7 @@ func (t *handlers) setRead(read bool) mcp.ToolHandlerFor[IDsIn, ActionOut] {
 			return nil, ActionOut{}, err
 		}
 		if err := apply(t.nc, ctx, ids...); err != nil {
-			return nil, ActionOut{}, mapErr(err, "item")
+			return nil, ActionOut{}, tools.MapErr(err, "item")
 		}
 		return nil, ActionOut{OK: true, ItemIDs: ids, Message: fmt.Sprintf("%d item(s) marked as %s", len(ids), state)}, nil
 	}
@@ -346,7 +329,7 @@ func (t *handlers) markAllRead(ctx context.Context, _ *mcp.CallToolRequest, in M
 	} else {
 		fr, err := t.nc.ListFeeds(ctx)
 		if err != nil {
-			return nil, ActionOut{}, mapErr(err, "feeds")
+			return nil, ActionOut{}, tools.MapErr(err, "feeds")
 		}
 		if fr.NewestItemID == nil {
 			return nil, ActionOut{OK: true, Message: "no items: nothing to mark"}, nil
@@ -357,23 +340,23 @@ func (t *handlers) markAllRead(ctx context.Context, _ *mcp.CallToolRequest, in M
 		return nil, ActionOut{}, errors.New("newestItemId must be positive")
 	}
 	if err := t.nc.MarkAllRead(ctx, newest); err != nil {
-		return nil, ActionOut{}, mapErr(err, "item")
+		return nil, ActionOut{}, tools.MapErr(err, "item")
 	}
 	return nil, ActionOut{OK: true, Message: fmt.Sprintf("all items up to id %d marked as read", newest)}, nil
 }
 
 // setStar returns the handler of news_star (starred) or news_unstar.
 func (t *handlers) setStar(starred bool) mcp.ToolHandlerFor[ItemIDIn, ActionOut] {
-	apply, msg := NewsAPI.Unstar, "star removed"
+	apply, msg := API.Unstar, "star removed"
 	if starred {
-		apply, msg = NewsAPI.Star, "item starred"
+		apply, msg = API.Star, "item starred"
 	}
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (*mcp.CallToolResult, ActionOut, error) {
 		if err := positiveID(in.ID); err != nil {
 			return nil, ActionOut{}, err
 		}
 		if err := apply(t.nc, ctx, in.ID); err != nil {
-			return nil, ActionOut{}, mapErr(err, fmt.Sprintf("item %d", in.ID))
+			return nil, ActionOut{}, tools.MapErr(err, fmt.Sprintf("item %d", in.ID))
 		}
 		return nil, ActionOut{OK: true, ItemIDs: []int64{in.ID}, Message: msg}, nil
 	}
@@ -387,11 +370,11 @@ func (t *handlers) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in Ge
 	typ, id, _ := scope(in.FeedID, in.FolderID)
 	items, err := t.nc.GetUpdated(ctx, in.LastModified, typ, id)
 	if err != nil {
-		return nil, out, mapErr(err, "feed or folder")
+		return nil, out, tools.MapErr(err, "feed or folder")
 	}
 	// Oldest changes first so that NextLastModified is a valid resume point
 	// even when the result is truncated.
-	slices.SortFunc(items, func(a, b nextcloud.Item) int {
+	slices.SortFunc(items, func(a, b newsapi.Item) int {
 		if c := cmp.Compare(a.LastModified, b.LastModified); c != 0 {
 			return c
 		}
@@ -412,7 +395,7 @@ func (t *handlers) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in Ge
 
 // ---------- helpers ----------
 
-func toItemOut(it *nextcloud.Item, withBody bool, bodyChars int) ItemOut {
+func toItemOut(it *newsapi.Item, withBody bool, bodyChars int) ItemOut {
 	o := ItemOut{
 		ID: it.ID, Title: it.Title, URL: it.URL, Author: it.Author, FeedID: it.FeedID,
 		Unread: it.Unread, Starred: it.Starred, LastModified: it.LastModified,
@@ -471,4 +454,41 @@ func htmlToText(s string) string {
 		lines[i] = strings.TrimSpace(l)
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+// Toolset returns the news_* tools, bound to api.
+func Toolset(api API) tools.Toolset {
+	t := &handlers{nc: api}
+	return tools.Toolset{Name: "news", Tools: []tools.ServerTool{
+		tools.New("news_list_feeds", "List feeds",
+			"List the Nextcloud News feeds (id, title, url, folder, unread count) and folders.",
+			tools.ReadOnly, t.listFeeds),
+		tools.New("news_list_items", "List articles",
+			"List Nextcloud News articles, newest first, unread only by default. "+
+				"Filter by feedId, folderId or starredOnly; paginate with limit + offset (offset = nextOffset of the previous page). "+
+				"Returns short excerpts; use news_get_item for the full article.",
+			tools.ReadOnly, t.listItems),
+		tools.New("news_get_item", "Get article",
+			"Get one Nextcloud News article by id: title, url, author, dates, read/starred state and body (plain text by default).",
+			tools.ReadOnly, t.getItem),
+		tools.New("news_get_updated", "Get updated articles",
+			"Incremental sync: articles created or changed (read/starred state included) since lastModified. "+
+				"Expensive on large accounts; prefer news_list_items for browsing.",
+			tools.ReadOnly, t.getUpdated),
+		tools.New("news_mark_read", "Mark as read",
+			"Mark one article (itemId) or several (itemIds) as read.",
+			tools.Reversible, t.setRead(true)),
+		tools.New("news_mark_unread", "Mark as unread",
+			"Mark one article (itemId) or several (itemIds) as unread.",
+			tools.Reversible, t.setRead(false)),
+		tools.New("news_star", "Star article",
+			"Star (favourite) an article.",
+			tools.Reversible, t.setStar(true)),
+		tools.New("news_unstar", "Unstar article",
+			"Remove the star from an article.",
+			tools.Reversible, t.setStar(false)),
+		tools.New("news_mark_all_read", "Mark all as read",
+			"Mark ALL articles of every feed as read, up to newestItemId (defaults to the newest article). Cannot be undone in bulk.",
+			tools.Destructive, t.markAllRead),
+	}}
 }

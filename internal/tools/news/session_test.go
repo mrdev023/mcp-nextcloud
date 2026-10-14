@@ -1,4 +1,4 @@
-package tools
+package news
 
 import (
 	"context"
@@ -6,21 +6,23 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
 // connect registers every tool on a fresh server and returns a client
 // session connected to it through in-memory transports.
-func connect(t *testing.T, api NewsAPI) *mcp.ClientSession {
+func connect(t *testing.T, api API) *mcp.ClientSession {
 	t.Helper()
-	return connectWith(t, api, Options{})
+	return connectWith(t, api, tools.Options{})
 }
 
 // connectWith is connect with registration options.
-func connectWith(t *testing.T, api NewsAPI, opts Options) *mcp.ClientSession {
+func connectWith(t *testing.T, api API, opts tools.Options) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-	Register(s, api, opts)
+	tools.Register(s, opts, Toolset(api))
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := s.Connect(ctx, st, nil)
 	if err != nil {
@@ -76,7 +78,7 @@ func TestAnnotations(t *testing.T) {
 }
 
 func TestReadOnlyOption(t *testing.T) {
-	res, err := connectWith(t, nil, Options{ReadOnly: true}).ListTools(context.Background(), nil)
+	res, err := connectWith(t, nil, tools.Options{ReadOnly: true}).ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

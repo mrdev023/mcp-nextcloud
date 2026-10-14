@@ -18,8 +18,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
+	newstools "github.com/mrdev023/mcp-nextcloud-news/internal/tools/news"
 )
 
 type bearerRT struct{ tok string }
@@ -32,7 +34,7 @@ func (b bearerRT) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // TestEndToEnd exercises DCR -> authorize -> token -> authenticated MCP calls.
 func TestEndToEnd(t *testing.T) {
-	ncSrv := nextcloudtest.NewServer(t, map[string]http.HandlerFunc{
+	ncSrv := nextcloudtest.NewServer(t, news.APIPath, map[string]http.HandlerFunc{
 		"GET items": func(w http.ResponseWriter, _ *http.Request) {
 			nextcloudtest.WriteJSON(w, map[string]any{"items": []map[string]any{
 				{"id": 5, "title": "Hello", "body": "<p>Hello <b>world</b></p>", "unread": true, "feedId": 1, "pubDate": 1700000000},
@@ -55,7 +57,7 @@ func TestEndToEnd(t *testing.T) {
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
-	tools.Register(server, nc, tools.Options{})
+	tools.Register(server, tools.Options{}, newstools.Toolset(news.New(nc)))
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 	mux.Handle("/mcp", auth.RequireBearerToken(as.VerifyAccessToken, &auth.RequireBearerTokenOptions{Scopes: []string{Scope}})(h))
 	mux.HandleFunc("/register", as.RegisterHandler)

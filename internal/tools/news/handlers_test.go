@@ -1,4 +1,4 @@
-package tools
+package news
 
 import (
 	"context"
@@ -11,20 +11,22 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	newsapi "github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
-// fakeNews is an in-memory NewsAPI that records what the tools asked for.
+// fakeNews is an in-memory API that records what the tools asked for.
 type fakeNews struct {
 	mu sync.Mutex
 
-	feeds   nextcloud.FeedsResponse
-	folders []nextcloud.Folder
-	items   []nextcloud.Item // served by ListItems, GetItem and GetUpdated
-	err     error            // returned by every call when set
+	feeds   newsapi.FeedsResponse
+	folders []newsapi.Folder
+	items   []newsapi.Item // served by ListItems, GetItem and GetUpdated
+	err     error          // returned by every call when set
 
 	calls  []string
-	params nextcloud.ListItemsParams // last ListItems call
-	ids    []int64                   // ids of the last write call
+	params newsapi.ListItemsParams // last ListItems call
+	ids    []int64                 // ids of the last write call
 }
 
 func (f *fakeNews) record(call string, ids ...int64) error {
@@ -44,18 +46,18 @@ func (f *fakeNews) lastCall() (string, []int64) {
 	return f.calls[len(f.calls)-1], f.ids
 }
 
-func (f *fakeNews) ListFeeds(context.Context) (*nextcloud.FeedsResponse, error) {
+func (f *fakeNews) ListFeeds(context.Context) (*newsapi.FeedsResponse, error) {
 	if err := f.record("ListFeeds"); err != nil {
 		return nil, err
 	}
 	return &f.feeds, nil
 }
 
-func (f *fakeNews) ListFolders(context.Context) ([]nextcloud.Folder, error) {
+func (f *fakeNews) ListFolders(context.Context) ([]newsapi.Folder, error) {
 	return f.folders, f.record("ListFolders")
 }
 
-func (f *fakeNews) ListItems(_ context.Context, p nextcloud.ListItemsParams) ([]nextcloud.Item, error) {
+func (f *fakeNews) ListItems(_ context.Context, p newsapi.ListItemsParams) ([]newsapi.Item, error) {
 	f.mu.Lock()
 	f.params = p
 	f.mu.Unlock()
@@ -65,7 +67,7 @@ func (f *fakeNews) ListItems(_ context.Context, p nextcloud.ListItemsParams) ([]
 	return f.items, nil
 }
 
-func (f *fakeNews) GetItem(_ context.Context, id int64) (*nextcloud.Item, error) {
+func (f *fakeNews) GetItem(_ context.Context, id int64) (*newsapi.Item, error) {
 	if err := f.record("GetItem", id); err != nil {
 		return nil, err
 	}
@@ -77,11 +79,11 @@ func (f *fakeNews) GetItem(_ context.Context, id int64) (*nextcloud.Item, error)
 	return nil, nextcloud.ErrNotFound
 }
 
-func (f *fakeNews) GetUpdated(_ context.Context, lastModified int64, t nextcloud.ItemType, id int64) ([]nextcloud.Item, error) {
+func (f *fakeNews) GetUpdated(_ context.Context, lastModified int64, t newsapi.ItemType, id int64) ([]newsapi.Item, error) {
 	if err := f.record(fmt.Sprintf("GetUpdated(%d,%d,%d)", lastModified, t, id)); err != nil {
 		return nil, err
 	}
-	return append([]nextcloud.Item(nil), f.items...), nil
+	return append([]newsapi.Item(nil), f.items...), nil
 }
 
 func (f *fakeNews) MarkRead(_ context.Context, ids ...int64) error {
@@ -130,12 +132,12 @@ func ptr[T any](v T) *T { return &v }
 
 func TestListFeedsTool(t *testing.T) {
 	f := &fakeNews{
-		feeds: nextcloud.FeedsResponse{
-			Feeds:        []nextcloud.Feed{{ID: 1, Title: "Go blog", URL: "https://go.dev/blog/feed.atom", FolderID: ptr(int64(3)), UnreadCount: 2, LastUpdateError: "timeout"}},
+		feeds: newsapi.FeedsResponse{
+			Feeds:        []newsapi.Feed{{ID: 1, Title: "Go blog", URL: "https://go.dev/blog/feed.atom", FolderID: ptr(int64(3)), UnreadCount: 2, LastUpdateError: "timeout"}},
 			StarredCount: 4,
 			NewestItemID: ptr(int64(99)),
 		},
-		folders: []nextcloud.Folder{{ID: 3, Name: "Tech"}},
+		folders: []newsapi.Folder{{ID: 3, Name: "Tech"}},
 	}
 	out := decode[ListFeedsOut](t, connect(t, f), "news_list_feeds", nil)
 	if len(out.Feeds) != 1 || out.Feeds[0].Title != "Go blog" || *out.Feeds[0].FolderID != 3 || out.Feeds[0].UpdateError != "timeout" {
@@ -147,32 +149,32 @@ func TestListFeedsTool(t *testing.T) {
 }
 
 func TestListItemsTool(t *testing.T) {
-	items := []nextcloud.Item{
+	items := []newsapi.Item{
 		{ID: 30, Title: "Go 1.26 released", Body: "<p>Generic <b>methods</b></p>", FeedID: 1, Unread: true, PubDate: 1700000000},
 		{ID: 20, Title: "Rust news", Body: "borrow checker", FeedID: 2},
 	}
 	for _, tc := range []struct {
 		name       string
 		args       map[string]any
-		wantParams nextcloud.ListItemsParams
+		wantParams newsapi.ListItemsParams
 		wantIDs    []int64
 		wantNext   int64
 		wantErr    string
 	}{
 		{name: "defaults", args: nil,
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeAll, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeAll, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
 		{name: "feed wins over folder and starred", args: map[string]any{"feedId": 7, "folderId": 8, "starredOnly": true},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeFeed, ID: 7, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeFeed, ID: 7, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
 		{name: "folder wins over starred", args: map[string]any{"folderId": 8, "starredOnly": true},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeFolder, ID: 8, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeFolder, ID: 8, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
 		{name: "starred", args: map[string]any{"starredOnly": true, "includeRead": true, "oldestFirst": true},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeStarred, GetRead: true, OldestFirst: true, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeStarred, GetRead: true, OldestFirst: true, BatchSize: defaultListLimit}, wantIDs: []int64{30, 20}},
 		{name: "limit clamped, full page gives a cursor", args: map[string]any{"limit": 2, "offset": 50},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeAll, BatchSize: 2, Offset: 50}, wantIDs: []int64{30, 20}, wantNext: 20},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeAll, BatchSize: 2, Offset: 50}, wantIDs: []int64{30, 20}, wantNext: 20},
 		{name: "limit above max", args: map[string]any{"limit": 5000},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeAll, BatchSize: maxListLimit}, wantIDs: []int64{30, 20}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeAll, BatchSize: maxListLimit}, wantIDs: []int64{30, 20}},
 		{name: "search filters locally too", args: map[string]any{"search": "  GO methods "},
-			wantParams: nextcloud.ListItemsParams{Type: nextcloud.TypeAll, BatchSize: defaultListLimit, Search: "GO methods"}, wantIDs: []int64{30}},
+			wantParams: newsapi.ListItemsParams{Type: newsapi.TypeAll, BatchSize: defaultListLimit, Search: "GO methods"}, wantIDs: []int64{30}},
 		{name: "negative offset", args: map[string]any{"offset": -1}, wantErr: "offset must be >= 0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -212,7 +214,7 @@ func TestListItemsTool(t *testing.T) {
 }
 
 func TestGetItemTool(t *testing.T) {
-	f := &fakeNews{items: []nextcloud.Item{{ID: 7, Title: "Long", Body: "<p>" + strings.Repeat("é", 50) + "</p>"}}}
+	f := &fakeNews{items: []newsapi.Item{{ID: 7, Title: "Long", Body: "<p>" + strings.Repeat("é", 50) + "</p>"}}}
 	cs := connect(t, f)
 
 	out := decode[ItemOut](t, cs, "news_get_item", map[string]any{"id": 7})
@@ -270,7 +272,7 @@ func TestWriteTools(t *testing.T) {
 		{"news_mark_all_read", map[string]any{"newestItemId": -3}, "", nil, "newestItemId must be positive"},
 	} {
 		t.Run(tc.tool+"/"+tc.wantMsg, func(t *testing.T) {
-			f := &fakeNews{feeds: nextcloud.FeedsResponse{NewestItemID: ptr(int64(99))}}
+			f := &fakeNews{feeds: newsapi.FeedsResponse{NewestItemID: ptr(int64(99))}}
 			text, isErr := call(t, connect(t, f), tc.tool, tc.args)
 			gotCall, gotIDs := f.lastCall()
 			if tc.wantCall == "" {
@@ -299,7 +301,7 @@ func TestWriteTools(t *testing.T) {
 }
 
 func TestGetUpdatedTool(t *testing.T) {
-	f := &fakeNews{items: []nextcloud.Item{
+	f := &fakeNews{items: []newsapi.Item{
 		{ID: 3, LastModified: 300}, {ID: 1, LastModified: 100}, {ID: 4, LastModified: 300}, {ID: 2, LastModified: 200},
 	}}
 	cs := connect(t, f)
@@ -343,7 +345,7 @@ func TestErrorMapping(t *testing.T) {
 			t.Errorf("%v: got %q (error %v), want %q", tc.err, text, isErr, tc.want)
 		}
 	}
-	if err := mapErr(nil, "x"); err != nil {
-		t.Errorf("mapErr(nil) = %v", err)
+	if err := tools.MapErr(nil, "x"); err != nil {
+		t.Errorf("tools.MapErr(nil) = %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-// Package nextcloudtest provides a fake Nextcloud News API server for tests.
+// Package nextcloudtest provides a fake Nextcloud app API server for tests.
 package nextcloudtest
 
 import (
@@ -17,17 +17,15 @@ const (
 	AppPassword = "secret-app-pw"
 )
 
-// Prefix is the path of the News API v1-3 below the Nextcloud URL.
-const Prefix = "/index.php/apps/news/api/v1-3/"
-
 // Call is one request received by the fake server, with Path relative to
-// Prefix.
+// the server prefix.
 type Call struct {
 	Method, Path, Query, Body string
 }
 
-// Server is a fake News API. Routes are keyed by "METHOD path", for instance
-// "GET items" or "POST items/3/star"; unknown routes answer 404.
+// Server is a fake Nextcloud app API. Routes are keyed by "METHOD path", with
+// path relative to the prefix given to NewServer, for instance "GET items" or
+// "POST items/3/star"; unknown routes answer 404.
 type Server struct {
 	*httptest.Server
 
@@ -35,9 +33,10 @@ type Server struct {
 	calls []Call
 }
 
-// NewServer starts a fake News API that requires the User / AppPassword
-// credentials. It is closed when the test ends.
-func NewServer(t *testing.T, routes map[string]http.HandlerFunc) *Server {
+// NewServer starts a fake app API served below prefix (an app API path such as
+// news.APIPath) that requires the User / AppPassword credentials. It is closed
+// when the test ends.
+func NewServer(t *testing.T, prefix string, routes map[string]http.HandlerFunc) *Server {
 	t.Helper()
 	s := &Server{}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +46,7 @@ func NewServer(t *testing.T, routes map[string]http.HandlerFunc) *Server {
 			return
 		}
 		b, _ := io.ReadAll(r.Body)
-		path := strings.TrimPrefix(r.URL.Path, Prefix)
+		path := strings.TrimPrefix(r.URL.Path, "/"+prefix)
 		s.mu.Lock()
 		s.calls = append(s.calls, Call{r.Method, path, r.URL.RawQuery, string(b)})
 		s.mu.Unlock()

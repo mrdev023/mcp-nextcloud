@@ -1,4 +1,4 @@
-package tools
+package news
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ var update = flag.Bool("update", false, "rewrite the tool schema snapshots in te
 // struct tag silently changes the API offered to LLMs; this makes it show up
 // in review. After an intended change, run:
 //
-//	go test ./internal/tools -run TestToolSnapshots -update
+//	go test ./internal/tools/news -run TestToolSnapshots -update
 func TestToolSnapshots(t *testing.T) {
 	res, err := connect(t, nil).ListTools(context.Background(), nil)
 	if err != nil {
