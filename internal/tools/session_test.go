@@ -5,17 +5,15 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 )
 
 // connect registers the tools on a fresh server and returns a client session
 // connected to it through in-memory transports.
-func connect(t *testing.T, nc *nextcloud.Client) *mcp.ClientSession {
+func connect(t *testing.T, api NewsAPI) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-	Register(s, nc)
+	Register(s, api)
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := s.Connect(ctx, st, nil)
 	if err != nil {
