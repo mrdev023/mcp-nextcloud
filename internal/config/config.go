@@ -1,4 +1,4 @@
-// Package config loads the news-mcp settings from the environment.
+// Package config loads the mcp-nextcloud settings from the environment.
 package config
 
 import (
@@ -166,6 +166,8 @@ func Load() (*Config, error) {
 	} else {
 		// Deterministic key derived from the server secrets: tokens survive
 		// restarts, and changing any secret revokes all issued tokens.
+		// The label keeps the project's former name on purpose: changing it
+		// would change the derived key and revoke every issued token.
 		m := hmac.New(sha256.New, []byte("news-mcp signing key v1"))
 		for _, s := range []string{c.AppPassword, c.AuthPassword, c.ClientSecret, base} {
 			m.Write([]byte(s))

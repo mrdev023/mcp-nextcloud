@@ -115,7 +115,7 @@ func TestOAuthRoutes(t *testing.T) {
 	}
 }
 
-// TestOIDCEndToEnd runs the whole chain: MCP client with a JWT for news-mcp
+// TestOIDCEndToEnd runs the whole chain: MCP client with a JWT for mcp-nextcloud
 // -> validation -> token exchange -> Nextcloud called with the exchanged
 // token only. It also checks that no token reaches the logs.
 func TestOIDCEndToEnd(t *testing.T) {

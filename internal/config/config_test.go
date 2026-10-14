@@ -24,7 +24,7 @@ func setEnv(t *testing.T, kv map[string]string) {
 func TestLoadConfigModes(t *testing.T) {
 	oidcEnv := map[string]string{
 		"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc",
-		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "news-mcp",
+		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "mcp-nextcloud",
 		"MCP_OIDC_CLIENT_SECRET": "x", "MCP_OIDC_EXCHANGE_AUDIENCE": "nextcloud",
 		"MCP_BASE_URL": "https://news.example",
 	}
@@ -46,7 +46,7 @@ func TestLoadConfigModes(t *testing.T) {
 		wantAud  string
 	}{
 		{"oidc defaults audience to resource URI", oidcEnv, "", AuthModeOIDC, "https://news.example/mcp"},
-		{"oidc explicit audience", with(map[string]string{"MCP_OIDC_AUDIENCE": "news-mcp"}), "", AuthModeOIDC, "news-mcp"},
+		{"oidc explicit audience", with(map[string]string{"MCP_OIDC_AUDIENCE": "mcp-nextcloud"}), "", AuthModeOIDC, "mcp-nextcloud"},
 		{"oidc missing settings", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc"},
 			"MCP_OIDC_CLIENT_ID, MCP_OIDC_CLIENT_SECRET, MCP_OIDC_EXCHANGE_AUDIENCE, MCP_OIDC_ISSUER", "", ""},
 		{"oidc plain http issuer refused", with(map[string]string{"MCP_OIDC_ISSUER": "http://id.example"}), "https", "", ""},
@@ -95,7 +95,7 @@ func TestReadOnly(t *testing.T) {
 	}
 	// Also honoured in OIDC mode, which returns early from Load.
 	setEnv(t, map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc",
-		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "news-mcp",
+		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "mcp-nextcloud",
 		"MCP_OIDC_CLIENT_SECRET": "x", "MCP_OIDC_EXCHANGE_AUDIENCE": "nextcloud", "MCP_READ_ONLY": "true"})
 	if cfg, err := Load(); err != nil || !cfg.ReadOnly {
 		t.Errorf("oidc mode: cfg = %+v, err = %v", cfg, err)

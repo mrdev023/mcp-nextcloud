@@ -102,7 +102,7 @@ func TestOIDCKeyRotation(t *testing.T) {
 }
 
 // TestJWKSRefreshRateLimited checks that tokens signed with unknown keys
-// cannot make news-mcp refetch the JWKS on every request.
+// cannot make mcp-nextcloud refetch the JWKS on every request.
 func TestJWKSRefreshRateLimited(t *testing.T) {
 	f := oidctest.NewIDP(t)
 	o := newTestClient(f, nil)

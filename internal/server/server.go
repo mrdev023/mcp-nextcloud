@@ -1,5 +1,5 @@
 // Package server wires the MCP server, the authentication layer and the HTTP
-// routes of news-mcp.
+// routes of mcp-nextcloud.
 package server
 
 import (
@@ -34,7 +34,7 @@ func NewHandler(cfg *config.Config, version string, log *slog.Logger, nc *nextcl
 	if cfg.ReadOnly {
 		instructions = "Read-only tools to browse Nextcloud News articles. "
 	}
-	server := mcp.NewServer(&mcp.Implementation{Name: "nextcloud-news", Title: "Nextcloud News", Version: version}, &mcp.ServerOptions{
+	server := mcp.NewServer(&mcp.Implementation{Name: "mcp-nextcloud", Title: "MCP Nextcloud", Version: version}, &mcp.ServerOptions{
 		Instructions: instructions +
 			"Start with news_list_items (unread only by default) or news_list_feeds; use news_get_item for full text.",
 		Logger: log,
@@ -64,7 +64,7 @@ func NewHandler(cfg *config.Config, version string, log *slog.Logger, nc *nextcl
 	prmDoc := &oauthex.ProtectedResourceMetadata{
 		Resource:               resource,
 		BearerMethodsSupported: []string{"header"},
-		ResourceName:           "Nextcloud News MCP",
+		ResourceName:           "MCP Nextcloud",
 	}
 	// RFC 9728 section 3: well-known suffix inserted before the resource
 	// path. The root document is the fallback MCP clients try when

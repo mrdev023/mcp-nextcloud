@@ -113,6 +113,9 @@ func randomID() string {
 
 func (a *Server) mac(payload string) []byte {
 	m := hmac.New(sha256.New, a.cfg.SigningKey)
+	// Domain separator from the project's former name. Do not rename it: it
+	// is part of every issued code, token and client id, which would all
+	// become invalid.
 	m.Write([]byte("news-mcp.v1."))
 	m.Write([]byte(payload))
 	return m.Sum(nil)
@@ -279,7 +282,7 @@ func writeJSONResp(w http.ResponseWriter, status int, v any) {
 
 func oauthErr(w http.ResponseWriter, status int, code, desc string) {
 	if status == http.StatusUnauthorized {
-		w.Header().Set("WWW-Authenticate", `Basic realm="news-mcp"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="mcp-nextcloud"`)
 	}
 	writeJSONResp(w, status, map[string]string{"error": code, "error_description": desc})
 }
@@ -414,7 +417,7 @@ func (a *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 var authorizeTmpl = template.Must(template.New("authorize").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Authorize – Nextcloud News MCP</title>
+<title>Authorize – MCP Nextcloud</title>
 <style>
 body{font-family:system-ui,sans-serif;background:#f4f5f7;color:#222;display:flex;justify-content:center;padding:4rem 1rem;margin:0}
 main{background:#fff;max-width:26rem;width:100%;padding:2rem;border-radius:10px;box-shadow:0 2px 10px #0002}

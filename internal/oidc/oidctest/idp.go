@@ -20,11 +20,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Settings the fake provider expects from news-mcp.
+// Settings the fake provider expects from mcp-nextcloud.
 const (
-	ClientID         = "news-mcp"
+	ClientID         = "mcp-nextcloud"
 	ClientSecret     = "s3cret:with%specials"
-	Audience         = "news-mcp"
+	Audience         = "mcp-nextcloud"
 	UpstreamAudience = "nextcloud"
 	// ECKeyID is the kid of the EC P-256 key published in the JWKS.
 	ECKeyID = "ec1"

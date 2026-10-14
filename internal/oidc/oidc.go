@@ -1,6 +1,6 @@
 // Package oidc implements the external OIDC provider mode (MCP_AUTH_MODE=oidc).
 //
-// news-mcp is an OAuth 2.1 resource server for an external authorization
+// mcp-nextcloud is an OAuth 2.1 resource server for an external authorization
 // server, as the MCP authorization spec describes:
 //   - it validates every bearer JWT itself (signature via the issuer's JWKS,
 //     iss, aud, exp/nbf, asymmetric algorithms only) and only accepts tokens
@@ -65,7 +65,7 @@ type Config struct {
 	Issuer           string   // MCP_OIDC_ISSUER
 	Audience         string   // expected aud of incoming tokens
 	RequiredScopes   []string // optional
-	ClientID         string   // news-mcp's own client at the issuer
+	ClientID         string   // mcp-nextcloud's own client at the issuer
 	ClientSecret     string
 	ExchangeAudience string // audience requested for Nextcloud tokens
 	ExchangeScope    string // optional scope for the exchange
@@ -209,7 +209,7 @@ func (o *Client) refreshKeys(ctx context.Context) error {
 // keySet is the oidc.KeySet of a Client. Unlike go-oidc's RemoteKeySet, which
 // refetches the JWKS for every token whose signature does not verify, it
 // refreshes at most every jwksMinRefresh, so unauthenticated requests with
-// forged tokens cannot make news-mcp hammer the identity provider. It also
+// forged tokens cannot make mcp-nextcloud hammer the identity provider. It also
 // refreshes a JWKS older than jwksMaxAge, so removed keys stop being trusted.
 type keySet struct{ o *Client }
 
