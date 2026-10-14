@@ -19,6 +19,7 @@ import (
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
 type bearerRT struct{ tok string }
@@ -54,7 +55,7 @@ func TestEndToEnd(t *testing.T) {
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
-	registerTools(server, nc)
+	tools.Register(server, nc)
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 	mux.Handle("/mcp", auth.RequireBearerToken(as.VerifyAccessToken, &auth.RequireBearerTokenOptions{Scopes: []string{scopeNews}})(h))
 	mux.HandleFunc("/register", as.RegisterHandler)
@@ -163,14 +164,14 @@ func TestEndToEnd(t *testing.T) {
 	}
 	defer sess.Close()
 
-	tools, err := sess.ListTools(ctx, nil)
+	list, err := sess.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 9 {
-		t.Fatalf("got %d tools", len(tools.Tools))
+	if len(list.Tools) != 9 {
+		t.Fatalf("got %d tools", len(list.Tools))
 	}
-	for _, tl := range tools.Tools {
+	for _, tl := range list.Tools {
 		write := strings.Contains(tl.Name, "mark") || strings.Contains(tl.Name, "star")
 		if tl.Annotations == nil || tl.Annotations.ReadOnlyHint == write {
 			t.Errorf("%s: bad annotations %+v", tl.Name, tl.Annotations)
@@ -197,18 +198,6 @@ func TestEndToEnd(t *testing.T) {
 	res, err = sess.CallTool(ctx, &mcp.CallToolParams{Name: "news_star", Arguments: map[string]any{"id": 999}})
 	if err != nil || !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "item 999 not found") {
 		t.Errorf("star missing item: %v %+v", err, res)
-	}
-}
-
-func TestHTMLToText(t *testing.T) {
-	in := `<p>Hi&nbsp;<b>there</b></p><script>evil()</script><ul><li>a</li><li>b</li></ul>`
-	got := htmlToText(in)
-	want := "Hi there\n\n- a\n\n- b"
-	if got != want {
-		t.Errorf("htmlToText = %q, want %q", got, want)
-	}
-	if s, cut := truncate("héllo", 2); s != "hé…" || !cut {
-		t.Errorf("truncate = %q %v", s, cut)
 	}
 }
 

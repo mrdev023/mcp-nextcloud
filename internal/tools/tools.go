@@ -1,4 +1,5 @@
-package main
+// Package tools defines the MCP tools exposed by news-mcp.
+package tools
 
 import (
 	"cmp"
@@ -138,8 +139,9 @@ type GetUpdatedIn struct {
 
 // ---------- registration ----------
 
-func registerTools(s *mcp.Server, nc *nextcloud.Client) {
-	t := &tools{nc: nc}
+// Register adds every news_* tool to s.
+func Register(s *mcp.Server, nc *nextcloud.Client) {
+	t := &handlers{nc: nc}
 	yes, no := true, false
 
 	readOnly := func(title string) *mcp.ToolAnnotations {
@@ -207,7 +209,7 @@ func registerTools(s *mcp.Server, nc *nextcloud.Client) {
 	}, t.getUpdated)
 }
 
-type tools struct{ nc *nextcloud.Client }
+type handlers struct{ nc *nextcloud.Client }
 
 // mapErr turns client errors into clean, user-facing tool errors.
 func mapErr(err error, what string) error {
@@ -228,7 +230,7 @@ func mapErr(err error, what string) error {
 	return err
 }
 
-func (t *tools) listFeeds(ctx context.Context, _ *mcp.CallToolRequest, _ ListFeedsIn) (*mcp.CallToolResult, ListFeedsOut, error) {
+func (t *handlers) listFeeds(ctx context.Context, _ *mcp.CallToolRequest, _ ListFeedsIn) (*mcp.CallToolResult, ListFeedsOut, error) {
 	var out ListFeedsOut
 	fr, err := t.nc.ListFeeds(ctx)
 	if err != nil {
@@ -263,7 +265,7 @@ func clamp(v, def, max int) int {
 	return min(v, max)
 }
 
-func (t *tools) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListItemsIn) (*mcp.CallToolResult, ListItemsOut, error) {
+func (t *handlers) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListItemsIn) (*mcp.CallToolResult, ListItemsOut, error) {
 	out := ListItemsOut{Items: []ItemOut{}}
 	if in.Offset < 0 {
 		return nil, out, errors.New("offset must be >= 0")
@@ -314,7 +316,7 @@ func matches(it *nextcloud.Item, terms []string) bool {
 	return true
 }
 
-func (t *tools) getItem(ctx context.Context, _ *mcp.CallToolRequest, in GetItemIn) (*mcp.CallToolResult, ItemOut, error) {
+func (t *handlers) getItem(ctx context.Context, _ *mcp.CallToolRequest, in GetItemIn) (*mcp.CallToolResult, ItemOut, error) {
 	if in.ID <= 0 {
 		return nil, ItemOut{}, errors.New("id must be a positive item id")
 	}
@@ -356,7 +358,7 @@ func collectIDs(in IDsIn) ([]int64, error) {
 	return ids, nil
 }
 
-func (t *tools) markRead(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) (*mcp.CallToolResult, ActionOut, error) {
+func (t *handlers) markRead(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) (*mcp.CallToolResult, ActionOut, error) {
 	ids, err := collectIDs(in)
 	if err != nil {
 		return nil, ActionOut{}, err
@@ -367,7 +369,7 @@ func (t *tools) markRead(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) 
 	return nil, ActionOut{OK: true, ItemIDs: ids, Message: fmt.Sprintf("%d item(s) marked as read", len(ids))}, nil
 }
 
-func (t *tools) markUnread(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) (*mcp.CallToolResult, ActionOut, error) {
+func (t *handlers) markUnread(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn) (*mcp.CallToolResult, ActionOut, error) {
 	ids, err := collectIDs(in)
 	if err != nil {
 		return nil, ActionOut{}, err
@@ -378,7 +380,7 @@ func (t *tools) markUnread(ctx context.Context, _ *mcp.CallToolRequest, in IDsIn
 	return nil, ActionOut{OK: true, ItemIDs: ids, Message: fmt.Sprintf("%d item(s) marked as unread", len(ids))}, nil
 }
 
-func (t *tools) markAllRead(ctx context.Context, _ *mcp.CallToolRequest, in MarkAllReadIn) (*mcp.CallToolResult, ActionOut, error) {
+func (t *handlers) markAllRead(ctx context.Context, _ *mcp.CallToolRequest, in MarkAllReadIn) (*mcp.CallToolResult, ActionOut, error) {
 	var newest int64
 	if in.NewestItemID != nil {
 		newest = *in.NewestItemID
@@ -401,7 +403,7 @@ func (t *tools) markAllRead(ctx context.Context, _ *mcp.CallToolRequest, in Mark
 	return nil, ActionOut{OK: true, Message: fmt.Sprintf("all items up to id %d marked as read", newest)}, nil
 }
 
-func (t *tools) star(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (*mcp.CallToolResult, ActionOut, error) {
+func (t *handlers) star(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (*mcp.CallToolResult, ActionOut, error) {
 	if in.ID <= 0 {
 		return nil, ActionOut{}, errors.New("id must be a positive item id")
 	}
@@ -411,7 +413,7 @@ func (t *tools) star(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (
 	return nil, ActionOut{OK: true, ItemIDs: []int64{in.ID}, Message: "item starred"}, nil
 }
 
-func (t *tools) unstar(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (*mcp.CallToolResult, ActionOut, error) {
+func (t *handlers) unstar(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn) (*mcp.CallToolResult, ActionOut, error) {
 	if in.ID <= 0 {
 		return nil, ActionOut{}, errors.New("id must be a positive item id")
 	}
@@ -421,7 +423,7 @@ func (t *tools) unstar(ctx context.Context, _ *mcp.CallToolRequest, in ItemIDIn)
 	return nil, ActionOut{OK: true, ItemIDs: []int64{in.ID}, Message: "star removed"}, nil
 }
 
-func (t *tools) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in GetUpdatedIn) (*mcp.CallToolResult, UpdatedOut, error) {
+func (t *handlers) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in GetUpdatedIn) (*mcp.CallToolResult, UpdatedOut, error) {
 	out := UpdatedOut{Items: []ItemOut{}, NextLastModified: in.LastModified}
 	if in.LastModified < 0 {
 		return nil, out, errors.New("lastModified must be >= 0")

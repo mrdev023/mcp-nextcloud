@@ -26,6 +26,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
 var version = "dev"
@@ -251,7 +252,7 @@ func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *OIDC
 	if idp != nil {
 		server.AddReceivingMiddleware(idp.ExchangeMiddleware())
 	}
-	registerTools(server, nc)
+	tools.Register(server, nc)
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Logger:         log,
