@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
 )
 
 // APIPath is the path of the News API below the Nextcloud URL.

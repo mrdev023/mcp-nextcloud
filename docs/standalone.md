@@ -25,7 +25,7 @@ export NEXTCLOUD_URL=https://cloud.example.com
 export NEXTCLOUD_USER=alice
 export NEXTCLOUD_APP_PASSWORD='xxxxx-xxxxx-xxxxx-xxxxx-xxxxx'
 export MCP_AUTH_PASSWORD='correct horse battery staple'
-go run github.com/mrdev023/mcp-nextcloud-news/cmd/news-mcp@latest
+go run github.com/mrdev023/mcp-nextcloud/cmd/news-mcp@latest
 ```
 
 The MCP endpoint is `http://localhost:8080/mcp`.

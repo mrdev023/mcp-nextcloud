@@ -7,7 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
+	"github.com/mrdev023/mcp-nextcloud/internal/tools"
 )
 
 // connect registers every tool on a fresh server and returns a client

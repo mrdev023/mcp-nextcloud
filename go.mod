@@ -1,4 +1,4 @@
-module github.com/mrdev023/mcp-nextcloud-news
+module github.com/mrdev023/mcp-nextcloud
 
 go 1.26.8
 

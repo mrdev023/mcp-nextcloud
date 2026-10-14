@@ -12,14 +12,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/config"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/httpx"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/standalone"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
-	newstools "github.com/mrdev023/mcp-nextcloud-news/internal/tools/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/config"
+	"github.com/mrdev023/mcp-nextcloud/internal/httpx"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/oidc"
+	"github.com/mrdev023/mcp-nextcloud/internal/standalone"
+	"github.com/mrdev023/mcp-nextcloud/internal/tools"
+	newstools "github.com/mrdev023/mcp-nextcloud/internal/tools/news"
 )
 
 // NewHandler wires the MCP server, the authentication layer selected by

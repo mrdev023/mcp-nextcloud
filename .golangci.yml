@@ -49,4 +49,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/mrdev023/mcp-nextcloud-news
+        - github.com/mrdev023/mcp-nextcloud

@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/httpx"
+	"github.com/mrdev023/mcp-nextcloud/internal/httpx"
 )
 
 // Authentication modes (MCP_AUTH_MODE).

@@ -15,8 +15,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc/oidctest"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/oidc/oidctest"
 )
 
 func newTestClient(f *oidctest.IDP, logger *slog.Logger) *Client {

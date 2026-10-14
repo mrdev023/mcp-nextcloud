@@ -35,8 +35,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/httpx"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/httpx"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
 )
 
 // Only asymmetric algorithms: "none" and HMAC (HS*) are never accepted.

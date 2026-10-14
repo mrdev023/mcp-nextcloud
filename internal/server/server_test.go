@@ -16,11 +16,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/config"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc/oidctest"
+	"github.com/mrdev023/mcp-nextcloud/internal/config"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud/nextcloudtest"
+	"github.com/mrdev023/mcp-nextcloud/internal/oidc"
+	"github.com/mrdev023/mcp-nextcloud/internal/oidc/oidctest"
 )
 
 type bearerRT struct{ tok string }

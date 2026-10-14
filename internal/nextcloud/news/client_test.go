@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud/nextcloudtest"
 )
 
 var writeJSON = nextcloudtest.WriteJSON

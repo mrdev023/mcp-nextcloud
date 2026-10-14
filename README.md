@@ -31,7 +31,7 @@ export NEXTCLOUD_URL=https://cloud.example.com
 export NEXTCLOUD_USER='your-user'
 export NEXTCLOUD_APP_PASSWORD='xxxxx-xxxxx-xxxxx-xxxxx-xxxxx'   # Nextcloud: Settings → Security
 export MCP_AUTH_PASSWORD='a long passphrase'                    # typed when a client asks for access
-go run github.com/mrdev023/mcp-nextcloud-news/cmd/news-mcp@latest
+go run github.com/mrdev023/mcp-nextcloud/cmd/news-mcp@latest
 ```
 
 Then connect a client, for example Claude Code:

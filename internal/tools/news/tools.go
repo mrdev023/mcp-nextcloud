@@ -16,8 +16,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	newsapi "github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
+	newsapi "github.com/mrdev023/mcp-nextcloud/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/tools"
 )
 
 const (

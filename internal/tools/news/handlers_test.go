@@ -10,9 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	newsapi "github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	newsapi "github.com/mrdev023/mcp-nextcloud/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/tools"
 )
 
 // fakeNews is an in-memory API that records what the tools asked for.

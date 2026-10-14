@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/config"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/server"
+	"github.com/mrdev023/mcp-nextcloud/internal/config"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/oidc"
+	"github.com/mrdev023/mcp-nextcloud/internal/server"
 )
 
 var version = "dev"

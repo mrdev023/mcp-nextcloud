@@ -17,11 +17,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/news"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
-	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
-	newstools "github.com/mrdev023/mcp-nextcloud-news/internal/tools/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud/news"
+	"github.com/mrdev023/mcp-nextcloud/internal/nextcloud/nextcloudtest"
+	"github.com/mrdev023/mcp-nextcloud/internal/tools"
+	newstools "github.com/mrdev023/mcp-nextcloud/internal/tools/news"
 )
 
 type bearerRT struct{ tok string }
