@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get updated articles"
+  },
+  "description": "Incremental sync: articles created or changed (read/starred state included) since lastModified. Expensive on large accounts; prefer news_list_items for browsing.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "feedId": {
+        "description": "restrict to this feed",
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "folderId": {
+        "description": "restrict to this folder",
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "includeBody": {
+        "description": "include plain-text bodies (truncated to 2000 chars)",
+        "type": "boolean"
+      },
+      "lastModified": {
+        "description": "unix timestamp (seconds or microseconds); returns items changed since then. Use nextLastModified from a previous call",
+        "type": "integer"
+      },
+      "limit": {
+        "description": "max items returned, oldest changes first (default 50, max 200)",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "lastModified"
+    ],
+    "type": "object"
+  },
+  "name": "news_get_updated",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "count": {
+        "type": "integer"
+      },
+      "items": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "author": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "bodyLength": {
+              "type": "integer"
+            },
+            "bodyTruncated": {
+              "type": "boolean"
+            },
+            "enclosure": {
+              "type": "string"
+            },
+            "excerpt": {
+              "type": "string"
+            },
+            "feedId": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "lastModified": {
+              "type": "integer"
+            },
+            "publishedAt": {
+              "type": "string"
+            },
+            "starred": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "feedId",
+            "unread",
+            "starred"
+          ],
+          "type": "object"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "nextLastModified": {
+        "type": "integer"
+      },
+      "total": {
+        "type": "integer"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "items",
+      "count",
+      "total",
+      "truncated",
+      "nextLastModified"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Mark as read"
+  },
+  "description": "Mark one article (itemId) or several (itemIds) as read.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "description": "a single item id",
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "itemIds": {
+        "description": "several item ids (batch, max 1000)",
+        "items": {
+          "type": "integer"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "name": "news_mark_read",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "itemIds": {
+        "items": {
+          "type": "integer"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "message": {
+        "type": "string"
+      },
+      "ok": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok",
+      "message"
+    ],
+    "type": "object"
+  }
+}

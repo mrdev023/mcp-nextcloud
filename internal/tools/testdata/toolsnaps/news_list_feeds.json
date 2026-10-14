@@ -1,0 +1,95 @@
+{
+  "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List feeds"
+  },
+  "description": "List the Nextcloud News feeds (id, title, url, folder, unread count) and folders.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "type": "object"
+  },
+  "name": "news_list_feeds",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "feeds": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "folderId": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "id": {
+              "type": "integer"
+            },
+            "link": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "unreadCount": {
+              "type": "integer"
+            },
+            "updateError": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "url",
+            "unreadCount"
+          ],
+          "type": "object"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "folders": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "type": "object"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "newestItemId": {
+        "type": "integer"
+      },
+      "starredCount": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "feeds",
+      "folders",
+      "starredCount"
+    ],
+    "type": "object"
+  }
+}

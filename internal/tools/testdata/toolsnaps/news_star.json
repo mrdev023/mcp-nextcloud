@@ -1,0 +1,49 @@
+{
+  "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Star article"
+  },
+  "description": "Star (favourite) an article.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "description": "item id",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
+  "name": "news_star",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "itemIds": {
+        "items": {
+          "type": "integer"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "message": {
+        "type": "string"
+      },
+      "ok": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok",
+      "message"
+    ],
+    "type": "object"
+  }
+}

@@ -130,7 +130,7 @@ go test ./...
 | Package | Covers |
 |---|---|
 | `internal/nextcloud` | Every client method against a fake Nextcloud (`nextcloudtest`): query strings, request bodies, 401/404/500 mapping, no password in errors, credential selection from the context |
-| `internal/tools` | HTML-to-text and truncation helpers |
+| `internal/tools` | Every tool through an in-memory MCP session and a fake client: parameters, validation, paging, error messages, annotations; schema snapshots in `testdata/toolsnaps` |
 | `internal/standalone` | Standalone end to end: registration, consent, PKCE, code replay, refresh, MCP session with tool calls; resource matching |
 | `internal/oidc` | JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, discovery issuer mismatch, token exchange and its bounded cache |
 | `internal/config` | Configuration validation for both authentication modes |
@@ -138,6 +138,12 @@ go test ./...
 | `internal/httpx` | Bearer token parsing |
 
 All tests run in-process in well under a second, without network access.
+
+The JSON schemas the tools expose are pinned by snapshots. After an intended change to a tool (description, input or output struct tags), regenerate them and review the diff:
+
+```sh
+go test ./internal/tools -run TestToolSnapshots -update
+```
 
 ## Build and release
 

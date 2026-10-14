@@ -1,0 +1,136 @@
+{
+  "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List articles"
+  },
+  "description": "List Nextcloud News articles, newest first, unread only by default. Filter by feedId, folderId or starredOnly; paginate with limit + offset (offset = nextOffset of the previous page). Returns short excerpts; use news_get_item for the full article.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "feedId": {
+        "description": "only items of this feed",
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "folderId": {
+        "description": "only items of this folder (ignored if feedId is set)",
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "includeBody": {
+        "description": "include the article body as plain text (truncated to 2000 chars). Default: a short excerpt only",
+        "type": "boolean"
+      },
+      "includeRead": {
+        "description": "include already-read items (default false: unread only)",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "max number of items to return (default 20, max 100)",
+        "type": "integer"
+      },
+      "offset": {
+        "description": "pagination cursor: pass nextOffset from the previous page (an item id, not a count). 0 = start",
+        "type": "integer"
+      },
+      "oldestFirst": {
+        "description": "return oldest items first",
+        "type": "boolean"
+      },
+      "search": {
+        "description": "full-text search terms (server-side when supported, also filtered on title/body)",
+        "type": "string"
+      },
+      "starredOnly": {
+        "description": "only starred items (ignored if feedId or folderId is set)",
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "name": "news_list_items",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "count": {
+        "type": "integer"
+      },
+      "items": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "author": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "bodyLength": {
+              "type": "integer"
+            },
+            "bodyTruncated": {
+              "type": "boolean"
+            },
+            "enclosure": {
+              "type": "string"
+            },
+            "excerpt": {
+              "type": "string"
+            },
+            "feedId": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "lastModified": {
+              "type": "integer"
+            },
+            "publishedAt": {
+              "type": "string"
+            },
+            "starred": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "feedId",
+            "unread",
+            "starred"
+          ],
+          "type": "object"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "nextOffset": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "count",
+      "nextOffset"
+    ],
+    "type": "object"
+  }
+}

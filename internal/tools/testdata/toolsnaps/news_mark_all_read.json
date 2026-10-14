@@ -1,0 +1,49 @@
+{
+  "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Mark all as read"
+  },
+  "description": "Mark ALL articles of every feed as read, up to newestItemId (defaults to the newest article). Cannot be undone in bulk.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "newestItemId": {
+        "description": "mark every item with id \u003c= this as read. Defaults to the newest item currently known (i.e. everything)",
+        "type": [
+          "null",
+          "integer"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "name": "news_mark_all_read",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "itemIds": {
+        "items": {
+          "type": "integer"
+        },
+        "type": [
+          "null",
+          "array"
+        ]
+      },
+      "message": {
+        "type": "string"
+      },
+      "ok": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok",
+      "message"
+    ],
+    "type": "object"
+  }
+}

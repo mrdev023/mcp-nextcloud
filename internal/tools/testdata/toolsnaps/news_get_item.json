@@ -1,0 +1,86 @@
+{
+  "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get article"
+  },
+  "description": "Get one Nextcloud News article by id: title, url, author, dates, read/starred state and body (plain text by default).",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "format": {
+        "description": "body format: text (default, HTML stripped) or html",
+        "type": "string"
+      },
+      "id": {
+        "description": "item id",
+        "type": "integer"
+      },
+      "maxBodyChars": {
+        "description": "truncate the body to this many characters (default 20000, max 200000)",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
+  "name": "news_get_item",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "author": {
+        "type": "string"
+      },
+      "body": {
+        "type": "string"
+      },
+      "bodyLength": {
+        "type": "integer"
+      },
+      "bodyTruncated": {
+        "type": "boolean"
+      },
+      "enclosure": {
+        "type": "string"
+      },
+      "excerpt": {
+        "type": "string"
+      },
+      "feedId": {
+        "type": "integer"
+      },
+      "id": {
+        "type": "integer"
+      },
+      "lastModified": {
+        "type": "integer"
+      },
+      "publishedAt": {
+        "type": "string"
+      },
+      "starred": {
+        "type": "boolean"
+      },
+      "title": {
+        "type": "string"
+      },
+      "unread": {
+        "type": "boolean"
+      },
+      "url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "feedId",
+      "unread",
+      "starred"
+    ],
+    "type": "object"
+  }
+}
