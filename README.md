@@ -63,10 +63,10 @@ docker run -d -p 8080:8080 \
 | `news_list_feeds` | Feeds (id, title, url, folder, unread count) and folders | read-only |
 | `news_list_items` | Articles, unread only by default. Filters: `feedId`, `folderId`, `starredOnly`, `includeRead`, `search`; paging: `limit` (≤ 100), `offset`, `oldestFirst`; `includeBody` | read-only |
 | `news_get_item` | One article: title, url, author, body (`format` `text` or `html`, `maxBodyChars`) | read-only |
-| `news_mark_read` | Mark `itemId` or `itemIds[]` as read | destructive |
-| `news_mark_unread` | Mark `itemId` or `itemIds[]` as unread | destructive |
-| `news_mark_all_read` | Mark everything read up to `newestItemId` (default: the newest article) | destructive |
-| `news_star` / `news_unstar` | Star / unstar an article (`id`) | destructive |
+| `news_mark_read` | Mark `itemId` or `itemIds[]` as read | idempotent, reversible |
+| `news_mark_unread` | Mark `itemId` or `itemIds[]` as unread | idempotent, reversible |
+| `news_mark_all_read` | Mark everything read up to `newestItemId` (default: the newest article) | idempotent, destructive |
+| `news_star` / `news_unstar` | Star / unstar an article (`id`) | idempotent, reversible |
 | `news_get_updated` | Incremental sync since `lastModified`; returns `nextLastModified` | read-only |
 
 - **Pagination.** In the News API, `offset` is an **article id**, not a count. Pass back the `nextOffset` returned by the previous page; `nextOffset: 0` means there are no more pages.

@@ -147,7 +147,12 @@ func Register(s *mcp.Server, nc *nextcloud.Client) {
 	readOnly := func(title string) *mcp.ToolAnnotations {
 		return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, OpenWorldHint: &no}
 	}
-	write := func(title string) *mcp.ToolAnnotations {
+	// Read/unread and star/unstar changes are undone by the opposite tool.
+	reversible := func(title string) *mcp.ToolAnnotations {
+		return &mcp.ToolAnnotations{Title: title, DestructiveHint: &no, IdempotentHint: true, OpenWorldHint: &no}
+	}
+	// Marking everything as read loses the unread state of every article.
+	destructive := func(title string) *mcp.ToolAnnotations {
 		return &mcp.ToolAnnotations{Title: title, DestructiveHint: &yes, IdempotentHint: true, OpenWorldHint: &no}
 	}
 
@@ -174,31 +179,31 @@ func Register(s *mcp.Server, nc *nextcloud.Client) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "news_mark_read",
 		Description: "Mark one article (itemId) or several (itemIds) as read.",
-		Annotations: write("Mark as read"),
+		Annotations: reversible("Mark as read"),
 	}, t.markRead)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "news_mark_unread",
 		Description: "Mark one article (itemId) or several (itemIds) as unread.",
-		Annotations: write("Mark as unread"),
+		Annotations: reversible("Mark as unread"),
 	}, t.markUnread)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "news_mark_all_read",
 		Description: "Mark ALL articles of every feed as read, up to newestItemId (defaults to the newest article). Cannot be undone in bulk.",
-		Annotations: write("Mark all as read"),
+		Annotations: destructive("Mark all as read"),
 	}, t.markAllRead)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "news_star",
 		Description: "Star (favourite) an article.",
-		Annotations: write("Star article"),
+		Annotations: reversible("Star article"),
 	}, t.star)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "news_unstar",
 		Description: "Remove the star from an article.",
-		Annotations: write("Unstar article"),
+		Annotations: reversible("Unstar article"),
 	}, t.unstar)
 
 	mcp.AddTool(s, &mcp.Tool{
