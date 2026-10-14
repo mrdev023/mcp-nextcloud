@@ -9,7 +9,7 @@ Set `LOG_LEVEL=debug` to log every HTTP request (method, path, status) and the r
 | `missing required environment variables: …` | A required variable for the selected mode is unset. See the [configuration reference](configuration.md). |
 | `MCP_AUTH_PASSWORD must be at least 12 characters` | Standalone mode requires a long server password. |
 | `MCP_OIDC_ISSUER must be an https URL` | Plain HTTP is only accepted for a loopback issuer. |
-| `MCP_AUTH_MODE=gateway was removed …` | The former gateway/passthrough mode forwarded tokens not issued for news-mcp. Use [OIDC mode](oidc.md). |
+| `MCP_AUTH_MODE=gateway was removed …` | The former gateway/passthrough mode forwarded tokens not issued for mcp-nextcloud. Use [OIDC mode](oidc.md). |
 
 ## MCP client cannot connect
 
@@ -26,7 +26,7 @@ Set `LOG_LEVEL=debug` to log every HTTP request (method, path, status) and the r
 
 | Tool error | Cause / fix |
 |---|---|
-| `could not obtain a Nextcloud token from the identity provider (token exchange failed: …)` | The provider refused the exchange; the reason follows. The provider's `error_description` is in news-mcp's logs. See the Keycloak errors below. |
+| `could not obtain a Nextcloud token from the identity provider (token exchange failed: …)` | The provider refused the exchange; the reason follows. The provider's `error_description` is in mcp-nextcloud's logs. See the Keycloak errors below. |
 | `Nextcloud authentication failed …` | Nextcloud refused the credentials. Standalone: the app-password was revoked. OIDC: see the Nextcloud errors below. |
 | `item N not found` | The article id does not exist (or was purged by Nextcloud's retention). |
 
@@ -34,8 +34,8 @@ Set `LOG_LEVEL=debug` to log every HTTP request (method, path, status) and the r
 
 | `error_description` | Fix |
 |---|---|
-| `Standard token exchange is not enabled for the requested client` | Enable *Standard Token Exchange* on the client that **authenticates** to the token endpoint (`news-mcp`, or the gateway's client), not on the audience. |
-| `Requested audience not available` | The requesting client's scopes don't resolve that audience. Add an Audience mapper for it on the client's dedicated scope ([Keycloak guide](keycloak.md#2-create-the-news-mcp-client)). |
+| `Standard token exchange is not enabled for the requested client` | Enable *Standard Token Exchange* on the client that **authenticates** to the token endpoint (`mcp-nextcloud`, or the gateway's client), not on the audience. |
+| `Requested audience not available` | The requesting client's scopes don't resolve that audience. Add an Audience mapper for it on the client's dedicated scope ([Keycloak guide](keycloak.md#2-create-the-mcp-nextcloud-client)). |
 | An audience error such as `Client is not within the token audience` | The subject token's `aud` does not contain the requesting client. Add an Audience mapper on the client that issued the subject token. |
 | `invalid_client` | Wrong `MCP_OIDC_CLIENT_ID` / `MCP_OIDC_CLIENT_SECRET`, or the client is not confidential. |
 
@@ -43,7 +43,7 @@ Set `LOG_LEVEL=debug` to log every HTTP request (method, path, status) and the r
 
 | Response | Fix |
 |---|---|
-| `401 "CORS requires basic auth"` | A bearer token was sent without `OCS-APIRequest: true`. news-mcp always sends it; this shows up in manual `curl` tests. |
+| `401 "CORS requires basic auth"` | A bearer token was sent without `OCS-APIRequest: true`. mcp-nextcloud always sends it; this shows up in manual `curl` tests. |
 | `401` with a valid token | Bearer checking is off (`occ user_oidc:provider <name> --check-bearer=1`), the token's `aud` is not the provider's client id, or the user never signed in to Nextcloud (and bearer provisioning is off). |
 | Nextcloud cannot reach the provider | If the provider resolves to a private IP, set `'allow_local_remote_servers' => true` in `config.php`. |
 
@@ -52,4 +52,4 @@ Set `LOG_LEVEL=debug` to log every HTTP request (method, path, status) and the r
 | Symptom | Fix |
 |---|---|
 | agentgateway: `oauth token exchange subject token missing` | The gateway removed the token after validating it. Use `jwtAuth` with `preserveToken: true`, and strip `Authorization` on other targets. |
-| agentgateway: `token exchange response missing token_type` | Some Keycloak endpoints omit `token_type` ([keycloak#53954](https://github.com/keycloak/keycloak/issues/53954)). The standard token endpoint used here returns it. news-mcp itself tolerates a missing value. |
+| agentgateway: `token exchange response missing token_type` | Some Keycloak endpoints omit `token_type` ([keycloak#53954](https://github.com/keycloak/keycloak/issues/53954)). The standard token endpoint used here returns it. mcp-nextcloud itself tolerates a missing value. |

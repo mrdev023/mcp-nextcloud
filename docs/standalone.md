@@ -1,16 +1,16 @@
 # Standalone mode
 
-Standalone mode needs nothing but a Nextcloud account. news-mcp embeds a small OAuth 2.1 authorization server for MCP clients, and talks to Nextcloud with an app-password that never leaves the server.
+Standalone mode needs nothing but a Nextcloud account. mcp-nextcloud embeds a small OAuth 2.1 authorization server for MCP clients, and talks to Nextcloud with an app-password that never leaves the server.
 
 ```mermaid
 flowchart LR
-    C[MCP client] -- "OAuth token<br/>(issued by news-mcp)" --> M[news-mcp]
+    C[MCP client] -- "OAuth token<br/>(issued by mcp-nextcloud)" --> M[mcp-nextcloud]
     M -- "app-password<br/>(HTTP Basic)" --> N[Nextcloud]
 ```
 
 ## 1. Create a Nextcloud app-password
 
-In Nextcloud: **Settings → Security → Devices & sessions → Create new app password**. Name it `news-mcp` and copy the generated password. You can revoke it there at any time.
+In Nextcloud: **Settings → Security → Devices & sessions → Create new app password**. Name it `mcp-nextcloud` and copy the generated password. You can revoke it there at any time.
 
 ## 2. Choose a server password
 
@@ -35,8 +35,8 @@ The MCP endpoint is `http://localhost:8080/mcp`.
 ```yaml
 # compose.yaml
 services:
-  news-mcp:
-    image: ghcr.io/mrdev023/mcp-nextcloud-news:latest
+  mcp-nextcloud:
+    image: ghcr.io/mrdev023/mcp-nextcloud:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"   # only reachable through the reverse proxy
@@ -45,7 +45,7 @@ services:
       NEXTCLOUD_USER: alice
       NEXTCLOUD_APP_PASSWORD: ${NEXTCLOUD_APP_PASSWORD}
       MCP_AUTH_PASSWORD: ${MCP_AUTH_PASSWORD}
-      MCP_BASE_URL: https://news.example.com   # public URL, used in OAuth metadata
+      MCP_BASE_URL: https://mcp.example.com   # public URL, used in OAuth metadata
 ```
 
 Put the two secrets in a `.env` file next to `compose.yaml`, then run `docker compose up -d`.
@@ -54,7 +54,7 @@ Reverse proxy examples:
 
 ```caddy
 # Caddyfile
-news.example.com {
+mcp.example.com {
     reverse_proxy 127.0.0.1:8080 {
         flush_interval -1   # /mcp streams Server-Sent Events
     }
@@ -64,7 +64,7 @@ news.example.com {
 ```nginx
 # nginx
 server {
-    server_name news.example.com;
+    server_name mcp.example.com;
     listen 443 ssl;
     # ssl_certificate ...;
 
@@ -78,7 +78,7 @@ server {
 }
 ```
 
-If `MCP_BASE_URL` has a path (`https://example.com/news`), the proxy must keep that prefix. It must also route `/.well-known/oauth-authorization-server/news` and `/.well-known/oauth-protected-resource/news/mcp` from the domain root to news-mcp.
+If `MCP_BASE_URL` has a path (`https://example.com/news`), the proxy must keep that prefix. It must also route `/.well-known/oauth-authorization-server/news` and `/.well-known/oauth-protected-resource/news/mcp` from the domain root to mcp-nextcloud.
 
 ## 4. Connect a client
 
@@ -87,19 +87,19 @@ Clients discover everything from the endpoint URL: they get a `401`, read the me
 **Claude Code**
 
 ```sh
-claude mcp add --transport http nextcloud-news https://news.example.com/mcp
+claude mcp add --transport http nextcloud https://mcp.example.com/mcp
 ```
 
-Then run `/mcp`, select `nextcloud-news` and choose *Authenticate*.
+Then run `/mcp`, select `nextcloud` and choose *Authenticate*.
 
 **Claude Desktop / claude.ai**
 
-Go to *Settings → Connectors → Add custom connector* and enter `https://news.example.com/mcp`.
+Go to *Settings → Connectors → Add custom connector* and enter `https://mcp.example.com/mcp`.
 
 **Cursor** (`~/.cursor/mcp.json`)
 
 ```json
-{ "mcpServers": { "nextcloud-news": { "url": "https://news.example.com/mcp" } } }
+{ "mcpServers": { "nextcloud": { "url": "https://mcp.example.com/mcp" } } }
 ```
 
 ### Pre-registered client (optional)
@@ -117,14 +117,14 @@ Enter the client id and secret in the client's advanced connector settings.
 
 ## How the authorization flow works
 
-On first connection, the client discovers news-mcp's authorization server and runs a standard OAuth 2.1 flow. You approve it once in your browser.
+On first connection, the client discovers mcp-nextcloud's authorization server and runs a standard OAuth 2.1 flow. You approve it once in your browser.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant U as You (browser)
     participant C as MCP client
-    participant M as news-mcp
+    participant M as mcp-nextcloud
     participant N as Nextcloud
 
     C->>M: POST /mcp (no token)

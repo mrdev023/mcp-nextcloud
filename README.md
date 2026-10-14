@@ -1,4 +1,4 @@
-# mcp-nextcloud-news
+# mcp-nextcloud
 
 > [!WARNING]
 > **Work in progress — do not use in production.** This is a personal project under active development: its configuration, tools and behaviour can change at any time without notice. It is provided as is, without any warranty (see the [license](LICENSE)); I accept no responsibility for any damage, data loss or security issue resulting from its use. If you run it anyway, do so at your own risk.
@@ -7,24 +7,24 @@ An [MCP](https://modelcontextprotocol.io) server, written in Go, that exposes a 
 
 - **Transport.** Streamable HTTP on `/mcp`.
 - **Two authentication modes**, both following the [MCP authorization spec](https://modelcontextprotocol.io/specification/latest/basic/authorization):
-  - **`standalone` (default).** No identity provider is needed. news-mcp embeds a small OAuth 2.1 server and calls Nextcloud with an app-password that never leaves the server.
-  - **`oidc`.** An external OpenID Connect provider (Keycloak, …) issues the tokens. news-mcp validates them and obtains a separate Nextcloud token per user through token exchange.
+  - **`standalone` (default).** No identity provider is needed. mcp-nextcloud embeds a small OAuth 2.1 server and calls Nextcloud with an app-password that never leaves the server.
+  - **`oidc`.** An external OpenID Connect provider (Keycloak, …) issues the tokens. mcp-nextcloud validates them and obtains a separate Nextcloud token per user through token exchange.
 - **Small footprint.** A single static binary (~11 MB) using ~15 MB of RAM, built from the standard library plus the official [Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk).
 
 ```mermaid
 flowchart LR
-    C[MCP client] -- "OAuth bearer token" --> M[news-mcp]
+    C[MCP client] -- "OAuth bearer token" --> M[mcp-nextcloud]
     M -- "standalone: app-password<br/>oidc: exchanged per-user token" --> N[Nextcloud News]
     M -. "oidc only: JWKS, token exchange" .-> P[OIDC provider]
 ```
 
-**Real-world use.** I run news-mcp in [OIDC mode](docs/oidc.md#behind-an-mcp-gateway) behind [agentgateway](https://agentgateway.dev), with Keycloak as the identity provider. My AI agent uses it to read the unread RSS articles, write a summary of them, and mark them as read.
+**Real-world use.** I run mcp-nextcloud in [OIDC mode](docs/oidc.md#behind-an-mcp-gateway) behind [agentgateway](https://agentgateway.dev), with Keycloak as the identity provider. My AI agent uses it to read the unread RSS articles, write a summary of them, and mark them as read.
 
 This is also how the project is tested: I test it continuously on my own infrastructure, with that agent as its real user. That covers one personal setup only, and is no guarantee that it works elsewhere.
 
 ## Quick start
 
-Run news-mcp in standalone mode:
+Run mcp-nextcloud in standalone mode:
 
 ```sh
 export NEXTCLOUD_URL=https://cloud.example.com
@@ -37,8 +37,8 @@ go run github.com/mrdev023/mcp-nextcloud/cmd/mcp-nextcloud@latest
 Then connect a client, for example Claude Code:
 
 ```sh
-claude mcp add --transport http nextcloud-news http://localhost:8080/mcp
-# then in Claude Code: /mcp → nextcloud-news → Authenticate
+claude mcp add --transport http nextcloud http://localhost:8080/mcp
+# then in Claude Code: /mcp → nextcloud → Authenticate
 ```
 
 Or with Docker. Multi-arch images are published on GHCR; they are distroless, run as non-root and are about 5 MB compressed:
@@ -47,7 +47,7 @@ Or with Docker. Multi-arch images are published on GHCR; they are distroless, ru
 docker run -d -p 8080:8080 \
   -e NEXTCLOUD_URL=https://cloud.example.com -e NEXTCLOUD_USER='your-user' \
   -e NEXTCLOUD_APP_PASSWORD='xxxxx-xxxxx-xxxxx-xxxxx-xxxxx' -e MCP_AUTH_PASSWORD='a long passphrase' \
-  ghcr.io/mrdev023/mcp-nextcloud-news:latest
+  ghcr.io/mrdev023/mcp-nextcloud:latest
 ```
 
 ## Documentation
@@ -89,7 +89,7 @@ An optional Nix shell (`shell.nix`) provides Go, gopls and golangci-lint; with d
 
 ## Need more than News?
 
-This project deliberately does one thing: Nextcloud News, in a small Go binary. If you want an MCP server for the rest of your Nextcloud, have a look at **[cbcoutinho/nextcloud-mcp-server](https://github.com/cbcoutinho/nextcloud-mcp-server)**. It is an excellent, much more complete project, covering:
+For now this project covers Nextcloud News only, in a small Go binary; it was renamed from `mcp-nextcloud-news` because support for more Nextcloud apps is planned. If you need an MCP server for the rest of your Nextcloud today, have a look at **[cbcoutinho/nextcloud-mcp-server](https://github.com/cbcoutinho/nextcloud-mcp-server)**. It is an excellent, much more complete project, covering:
 
 - Notes, Calendar, Contacts, Files, Deck, Tables, Cookbook and News, among other apps;
 - multi-user authentication;

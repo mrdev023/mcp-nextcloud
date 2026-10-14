@@ -1,6 +1,6 @@
 # Architecture
 
-news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no database, no background workers. Following the usual layout of Go MCP servers, `cmd/` holds the entry point and `internal/` one package per concern. This page explains how it is organised and why.
+mcp-nextcloud is a Go module of about 2,800 lines (plus tests): one binary, no database, no background workers. Following the usual layout of Go MCP servers, `cmd/` holds the entry point and `internal/` one package per concern. This page explains how it is organised and why.
 
 ## Repository layout
 
@@ -28,7 +28,7 @@ news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no databa
 ```mermaid
 flowchart TB
     client([MCP client])
-    subgraph news-mcp
+    subgraph mcp-nextcloud
         mux["HTTP mux + access log<br/>(server, httpx)"]
         subgraph auth [authentication layer]
             sa["Standalone: authorization server<br/>+ SDK RequireBearerToken<br/>(standalone)"]
@@ -112,7 +112,7 @@ Each app is a module in two packages; authentication, transport and the tool reg
 ## Design choices
 
 - **Stateless standalone tokens.** Authorization codes, access and refresh tokens, and DCR client ids are self-contained blobs signed with HMAC-SHA256. Nothing is stored except the ids of redeemed codes (until they expire), so tokens survive restarts. Rotating the signing key revokes everything.
-- **No token passthrough.** In OIDC mode the incoming token is validated for news-mcp's own audience, and Nextcloud only ever sees a token obtained by token exchange (see [OIDC mode](oidc.md)).
+- **No token passthrough.** In OIDC mode the incoming token is validated for mcp-nextcloud's own audience, and Nextcloud only ever sees a token obtained by token exchange (see [OIDC mode](oidc.md)).
 - **Lazy, cached exchange.** Listing tools without calling Nextcloud costs no exchange. Exchanged tokens are cached per incoming token (keyed by its SHA-256) in a bounded map of 256 entries, and never outlive the incoming token.
 - **Small memory footprint.**
   - The Go heap gets a soft limit of 32 MiB (`GOMEMLIMIT`).
@@ -166,6 +166,6 @@ go test ./internal/tools/news -run TestToolSnapshots -update
 - **Image.** The `Dockerfile` builds on the native platform and cross-compiles with `GOOS`/`GOARCH`, so multi-arch images need no emulation. The final stage is `gcr.io/distroless/static-debian12:nonroot`.
 - **CI.**
   - GitHub Actions runs gofmt, vet, golangci-lint, tests and a build on every push and pull request.
-  - It publishes `ghcr.io/<owner>/mcp-nextcloud-news` (`latest`, semver tags, sha) for `linux/amd64` and `linux/arm64`.
+  - It publishes `ghcr.io/<owner>/mcp-nextcloud` (`latest`, semver tags, sha) for `linux/amd64` and `linux/arm64`.
   - A separate Forgejo workflow publishes to a self-hosted registry.
 - **Development shell.** `shell.nix` (nixpkgs pinned by npins) provides Go, gopls and golangci-lint with `CGO_ENABLED=0`; `direnv allow` loads it automatically.

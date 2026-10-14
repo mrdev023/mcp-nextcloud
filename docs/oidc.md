@@ -1,20 +1,20 @@
 # OIDC mode
 
-In OIDC mode an external OpenID Connect provider (Keycloak, Authentik, Zitadel, …) issues the access tokens, and Nextcloud trusts that same provider. Each user reaches Nextcloud with their own identity. news-mcp holds no user credentials.
+In OIDC mode an external OpenID Connect provider (Keycloak, Authentik, Zitadel, …) issues the access tokens, and Nextcloud trusts that same provider. Each user reaches Nextcloud with their own identity. mcp-nextcloud holds no user credentials.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as MCP client
-    participant M as news-mcp
+    participant M as mcp-nextcloud
     participant P as OIDC provider
     participant N as Nextcloud (user_oidc)
 
-    C->>M: POST /mcp<br/>Authorization: Bearer (aud = news-mcp)
+    C->>M: POST /mcp<br/>Authorization: Bearer (aud = mcp-nextcloud)
     M->>P: GET /.well-known/openid-configuration, JWKS (cached)
     M->>M: verify signature, iss, aud, exp/nbf
     Note over M: tool call needs Nextcloud
-    M->>P: POST token endpoint (as client news-mcp)<br/>grant_type=token-exchange<br/>subject_token=…, audience=nextcloud
+    M->>P: POST token endpoint (as client mcp-nextcloud)<br/>grant_type=token-exchange<br/>subject_token=…, audience=nextcloud
     P-->>M: access_token (aud = nextcloud), cached
     M->>N: GET /index.php/apps/news/api/v1-3/…<br/>Bearer (aud = nextcloud) + OCS-APIRequest: true
     N-->>M: feeds / items
@@ -23,9 +23,9 @@ sequenceDiagram
 
 This follows the MCP authorization spec:
 
-- **Only tokens issued for news-mcp are accepted.** Tokens for any other audience are refused, including a token meant for Nextcloud.
-- **The token received is never forwarded.** news-mcp acts as an OAuth client and obtains a distinct token for Nextcloud.
-- **Discovery points to your provider.** The Protected Resource Metadata at `/.well-known/oauth-protected-resource/mcp` lists the provider as the authorization server, and news-mcp mounts no authorization endpoints.
+- **Only tokens issued for mcp-nextcloud are accepted.** Tokens for any other audience are refused, including a token meant for Nextcloud.
+- **The token received is never forwarded.** mcp-nextcloud acts as an OAuth client and obtains a distinct token for Nextcloud.
+- **Discovery points to your provider.** The Protected Resource Metadata at `/.well-known/oauth-protected-resource/mcp` lists the provider as the authorization server, and mcp-nextcloud mounts no authorization endpoints.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ This follows the MCP authorization spec:
   - JWT access tokens signed with an asymmetric key (RS\*, PS\*, ES\* or EdDSA);
   - RFC 8693 token exchange.
 - **Nextcloud** must accept bearer tokens from that provider, for example with the [`user_oidc`](https://github.com/nextcloud/user_oidc) app and bearer checking enabled.
-- **A confidential client for news-mcp** at the provider, allowed to perform token exchange and to request the Nextcloud audience.
+- **A confidential client for mcp-nextcloud** at the provider, allowed to perform token exchange and to request the Nextcloud audience.
 
 The [Keycloak guide](keycloak.md) covers all of this step by step.
 
@@ -43,10 +43,10 @@ The [Keycloak guide](keycloak.md) covers all of this step by step.
 ```sh
 MCP_AUTH_MODE=oidc
 NEXTCLOUD_URL=https://cloud.example.com
-MCP_BASE_URL=https://news.example.com                     # public URL of news-mcp
+MCP_BASE_URL=https://mcp.example.com                     # public URL of mcp-nextcloud
 MCP_OIDC_ISSUER=https://id.example.com/realms/example
-MCP_OIDC_AUDIENCE=news-mcp                                # aud that incoming tokens must contain
-MCP_OIDC_CLIENT_ID=news-mcp
+MCP_OIDC_AUDIENCE=mcp-nextcloud                                # aud that incoming tokens must contain
+MCP_OIDC_CLIENT_ID=mcp-nextcloud
 MCP_OIDC_CLIENT_SECRET=change-me
 MCP_OIDC_EXCHANGE_AUDIENCE=nextcloud                      # client id Nextcloud validates tokens for
 # MCP_OIDC_REQUIRED_SCOPES=news                           # optional
@@ -56,7 +56,7 @@ MCP_OIDC_EXCHANGE_AUDIENCE=nextcloud                      # client id Nextcloud 
 | Setting | Notes |
 |---|---|
 | `MCP_OIDC_ISSUER` | Must equal the `issuer` of the discovery document, character for character (no trailing slash for Keycloak). Must use HTTPS; plain HTTP is only allowed on loopback. |
-| `MCP_OIDC_AUDIENCE` | Defaults to the resource URI `$MCP_BASE_URL/mcp`. Keycloak puts client ids in `aud`, so set it to the news-mcp client id there. |
+| `MCP_OIDC_AUDIENCE` | Defaults to the resource URI `$MCP_BASE_URL/mcp`. Keycloak puts client ids in `aud`, so set it to the mcp-nextcloud client id there. |
 | `MCP_OIDC_EXCHANGE_AUDIENCE` | The audience Nextcloud checks: with `user_oidc`, the client id configured in the provider. |
 | `MCP_OIDC_REQUIRED_SCOPES` | Optional extra check on top of the audience. It is also advertised in the metadata. |
 
@@ -69,11 +69,11 @@ MCP_OIDC_EXCHANGE_AUDIENCE=nextcloud                      # client id Nextcloud 
 ```yaml
 # compose.yaml
 services:
-  news-mcp:
-    image: ghcr.io/mrdev023/mcp-nextcloud-news:latest
+  mcp-nextcloud:
+    image: ghcr.io/mrdev023/mcp-nextcloud:latest
     restart: unless-stopped
     ports: ["127.0.0.1:8080:8080"]   # behind an HTTPS reverse proxy
-    env_file: news-mcp.env           # the settings above, including the client secret
+    env_file: mcp-nextcloud.env           # the settings above, including the client secret
 ```
 
 MCP clients find the provider through the metadata. They then run the provider's authorization flow and must end up with tokens whose `aud` contains `MCP_OIDC_AUDIENCE`. With Keycloak, this requires:
@@ -85,7 +85,7 @@ MCP clients find the provider through the metadata. They then run the provider's
 
 ### Behind an MCP gateway
 
-A gateway such as [agentgateway](https://agentgateway.dev) can authenticate users for several MCP servers at once. It validates the client's token for its own audience, then exchanges it for a news-mcp token. news-mcp validates that token and exchanges it again for Nextcloud:
+A gateway such as [agentgateway](https://agentgateway.dev) can authenticate users for several MCP servers at once. It validates the client's token for its own audience, then exchanges it for a mcp-nextcloud token. mcp-nextcloud validates that token and exchanges it again for Nextcloud:
 
 ```mermaid
 sequenceDiagram
@@ -93,16 +93,16 @@ sequenceDiagram
     participant C as MCP client
     participant G as Gateway
     participant P as OIDC provider
-    participant M as news-mcp
+    participant M as mcp-nextcloud
     participant N as Nextcloud
 
     C->>G: POST /mcp, Bearer (aud = gateway)
     G->>G: validate token for its own audience
-    G->>P: token exchange as client "agentgateway", audience=news-mcp
-    P-->>G: token (aud = news-mcp)
-    G->>M: POST /mcp, Bearer (aud = news-mcp)
+    G->>P: token exchange as client "agentgateway", audience=mcp-nextcloud
+    P-->>G: token (aud = mcp-nextcloud)
+    G->>M: POST /mcp, Bearer (aud = mcp-nextcloud)
     M->>M: validate token
-    M->>P: token exchange as client "news-mcp", audience=nextcloud
+    M->>P: token exchange as client "mcp-nextcloud", audience=nextcloud
     P-->>M: token (aud = nextcloud)
     M->>N: News API, Bearer (aud = nextcloud) + OCS-APIRequest
     N-->>M: data
@@ -126,7 +126,7 @@ mcp:
       jwks: { url: https://id.example.com/realms/example/protocol/openid-connect/certs }
       preserveToken: true        # keep the token so it can be exchanged
   targets:
-    - name: nextcloud-news
+    - name: nextcloud
       mcp: { host: http://127.0.0.1:8080/mcp }
       policies:
         backendAuth:
@@ -135,11 +135,11 @@ mcp:
             policies: { backendTLS: {} }   # port 443 alone does not enable TLS
             path: /realms/example/protocol/openid-connect/token
             clientAuth: { clientId: agentgateway, clientSecret: $GATEWAY_CLIENT_SECRET, method: clientSecretBasic }
-            audiences: [news-mcp]
+            audiences: [mcp-nextcloud]
 ```
 
 - **`preserveToken: true`** is required. Without it the gateway strips the token after validating it, and the exchange fails with *"subject token missing"*. As a consequence, every *other* target must remove the `Authorization` header itself, or the user's token leaks to them.
-- **Network.** news-mcp can run in the gateway's network namespace (`docker run --network=container:<gateway>`), so that only the gateway reaches it on `127.0.0.1`.
+- **Network.** mcp-nextcloud can run in the gateway's network namespace (`docker run --network=container:<gateway>`), so that only the gateway reaches it on `127.0.0.1`.
 
 ## How tokens are validated
 
@@ -158,7 +158,7 @@ flowchart TD
 ```
 
 - **Library.** Discovery and token verification use [go-oidc](https://github.com/coreos/go-oidc), and JWKS parsing uses go-jose.
-- **Keys.** The JWKS is cached and refreshed every hour. A token signed with an unknown key triggers a refresh, so key rotation works without a restart. Refreshes are limited to one every 30 s, so forged tokens cannot make news-mcp flood the identity provider (go-oidc's own key set would refetch on every one).
+- **Keys.** The JWKS is cached and refreshed every hour. A token signed with an unknown key triggers a refresh, so key rotation works without a restart. Refreshes are limited to one every 30 s, so forged tokens cannot make mcp-nextcloud flood the identity provider (go-oidc's own key set would refetch on every one).
 - **Algorithms.** Only asymmetric algorithms are accepted; `none` and `HS*` are always refused.
 - **Claims.** `exp` is mandatory. Clock skew is tolerated up to 30 s on `exp` and, as go-oidc does, up to 5 minutes on `nbf`.
 - **No shared account.** `NEXTCLOUD_USER` / `NEXTCLOUD_APP_PASSWORD` are ignored, so there is no shared account to fall back on.
@@ -166,7 +166,7 @@ flowchart TD
 ## How the exchange behaves
 
 - **Lazy.** The exchange runs only when a tool actually calls Nextcloud, at most once per incoming token.
-- **Request.** news-mcp authenticates with `client_secret_basic` and sends:
+- **Request.** mcp-nextcloud authenticates with `client_secret_basic` and sends:
   - `subject_token_type` and `requested_token_type`: both `urn:ietf:params:oauth:token-type:access_token`;
   - `audience`: `MCP_OIDC_EXCHANGE_AUDIENCE`;
   - `scope`: `MCP_OIDC_EXCHANGE_SCOPE`, if set.

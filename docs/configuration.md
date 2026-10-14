@@ -1,6 +1,6 @@
 # Configuration reference
 
-news-mcp is configured with environment variables only.
+mcp-nextcloud is configured with environment variables only.
 
 ## Common settings
 
@@ -33,7 +33,7 @@ news-mcp is configured with environment variables only.
 | `MCP_OIDC_ISSUER` | yes | Issuer URL, e.g. `https://id.example.com/realms/example`. Must be https (http only on loopback). Discovery uses `$MCP_OIDC_ISSUER/.well-known/openid-configuration`. |
 | `MCP_OIDC_AUDIENCE` | no | Audience (`aud`) that incoming tokens must contain. Default: the resource URI `$MCP_BASE_URL/mcp`. |
 | `MCP_OIDC_REQUIRED_SCOPES` | no | Space- or comma-separated scopes every token must carry; also advertised in the metadata. Default: none. |
-| `MCP_OIDC_CLIENT_ID` / `MCP_OIDC_CLIENT_SECRET` | yes | news-mcp's own confidential client at the provider, used for token exchange (`client_secret_basic`). |
+| `MCP_OIDC_CLIENT_ID` / `MCP_OIDC_CLIENT_SECRET` | yes | mcp-nextcloud's own confidential client at the provider, used for token exchange (`client_secret_basic`). |
 | `MCP_OIDC_EXCHANGE_AUDIENCE` | yes | Audience requested for Nextcloud tokens, e.g. the client id Nextcloud validates tokens against. |
 | `MCP_OIDC_EXCHANGE_SCOPE` | no | Scope requested in the token exchange |
 
