@@ -124,6 +124,7 @@ The News API has a few quirks the client hides:
 
 ```sh
 go vet ./...
+golangci-lint run ./...   # config in .golangci.yml
 go test ./...
 ```
 
@@ -150,7 +151,7 @@ go test ./internal/tools -run TestToolSnapshots -update
 - **Binary.** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=…" ./cmd/news-mcp` produces a static binary of about 11 MB.
 - **Image.** The `Dockerfile` builds on the native platform and cross-compiles with `GOOS`/`GOARCH`, so multi-arch images need no emulation. The final stage is `gcr.io/distroless/static-debian12:nonroot`.
 - **CI.**
-  - GitHub Actions runs gofmt, vet, tests and a build on every push and pull request.
+  - GitHub Actions runs gofmt, vet, golangci-lint, tests and a build on every push and pull request.
   - It publishes `ghcr.io/<owner>/mcp-nextcloud-news` (`latest`, semver tags, sha) for `linux/amd64` and `linux/arm64`.
   - A separate Forgejo workflow publishes to a self-hosted registry.
-- **Development shell.** `shell.nix` (nixpkgs pinned by npins) provides Go and gopls with `CGO_ENABLED=0`; `direnv allow` loads it automatically.
+- **Development shell.** `shell.nix` (nixpkgs pinned by npins) provides Go, gopls and golangci-lint with `CGO_ENABLED=0`; `direnv allow` loads it automatically.

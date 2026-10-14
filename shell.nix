@@ -6,6 +6,7 @@ pkgs.mkShellNoCC {
   packages = with pkgs; [
     go
     gopls
+    golangci-lint
   ];
 
   # Pure-Go static binary, no C toolchain needed.

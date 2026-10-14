@@ -80,7 +80,7 @@ go test ./...
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o news-mcp ./cmd/news-mcp
 ```
 
-An optional Nix shell (`shell.nix`) provides Go and gopls; with direnv, run `direnv allow`. See [Architecture](docs/architecture.md) for how the code is organised.
+An optional Nix shell (`shell.nix`) provides Go, gopls and golangci-lint; with direnv, run `direnv allow`. See [Architecture](docs/architecture.md) for how the code is organised.
 
 ## Need more than News?
 

@@ -1,0 +1,52 @@
+version: "2"
+
+linters:
+  # standard: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - revive
+    - unparam
+  settings:
+    staticcheck:
+      checks:
+        # golangci-lint defaults...
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        # ...and no De Morgan rewrites, which rarely read better.
+        - -QF1001
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # OAuth URNs (grant and token type identifiers) are not credentials.
+      - linters:
+          - gosec
+        text: G101
+        source: '"urn:ietf:params:oauth:'
+      # Tests use fixed fake credentials, ignore errors of test fixtures,
+      # pass constant arguments to helpers and close bodies in helpers.
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - errcheck
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/mrdev023/mcp-nextcloud-news
