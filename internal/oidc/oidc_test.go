@@ -19,7 +19,7 @@ import (
 	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc/oidctest"
 )
 
-func newTestClient(f *oidctest.IdP, logger *slog.Logger) *Client {
+func newTestClient(f *oidctest.IDP, logger *slog.Logger) *Client {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -30,7 +30,7 @@ func newTestClient(f *oidctest.IdP, logger *slog.Logger) *Client {
 }
 
 func TestOIDCVerify(t *testing.T) {
-	f := oidctest.NewIdP(t)
+	f := oidctest.NewIDP(t)
 	o := newTestClient(f, nil)
 	ctx := context.Background()
 
@@ -90,7 +90,7 @@ func TestOIDCKeyRotation(t *testing.T) {
 	jwksMinRefresh = 0
 	t.Cleanup(func() { jwksMinRefresh = old })
 
-	f := oidctest.NewIdP(t)
+	f := oidctest.NewIDP(t)
 	o := newTestClient(f, nil)
 	if _, err := o.verify(context.Background(), f.Sign(f.Claims("alice"))); err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestOIDCKeyRotation(t *testing.T) {
 }
 
 func TestOIDCDiscoveryIssuerMismatch(t *testing.T) {
-	f := oidctest.NewIdP(t)
+	f := oidctest.NewIDP(t)
 	o := New(Config{
 		Issuer: f.URL + "/", Audience: oidctest.Audience, HTTPClient: f.Client(),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -113,7 +113,7 @@ func TestOIDCDiscoveryIssuerMismatch(t *testing.T) {
 }
 
 func TestTokenExchange(t *testing.T) {
-	f := oidctest.NewIdP(t)
+	f := oidctest.NewIDP(t)
 	o := newTestClient(f, nil)
 	ctx := context.Background()
 	alice := f.Sign(f.Claims("alice"))
@@ -154,7 +154,7 @@ func TestTokenExchange(t *testing.T) {
 		t.Errorf("token_type N_A: err = %v", err)
 	}
 
-	// IdP refusal surfaces as ErrTokenExchange with the OAuth error code.
+	// IDP refusal surfaces as ErrTokenExchange with the OAuth error code.
 	f.SetExchange(oidctest.Exchange{Status: http.StatusBadRequest, TokenType: "Bearer", ExpiresIn: 300})
 	_, err = o.Exchange(ctx, f.Sign(f.Claims("frank")), exp)
 	if !errors.Is(err, nextcloud.ErrTokenExchange) || !strings.Contains(err.Error(), "invalid_grant") {

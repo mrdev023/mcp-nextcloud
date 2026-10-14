@@ -33,12 +33,12 @@ func (b bearerRT) RoundTrip(r *http.Request) (*http.Response, error) {
 // TestEndToEnd exercises DCR -> authorize -> token -> authenticated MCP calls.
 func TestEndToEnd(t *testing.T) {
 	ncSrv := nextcloudtest.NewServer(t, map[string]http.HandlerFunc{
-		"GET items": func(w http.ResponseWriter, r *http.Request) {
+		"GET items": func(w http.ResponseWriter, _ *http.Request) {
 			nextcloudtest.WriteJSON(w, map[string]any{"items": []map[string]any{
 				{"id": 5, "title": "Hello", "body": "<p>Hello <b>world</b></p>", "unread": true, "feedId": 1, "pubDate": 1700000000},
 			}})
 		},
-		"POST items/read/multiple": func(w http.ResponseWriter, r *http.Request) {},
+		"POST items/read/multiple": func(http.ResponseWriter, *http.Request) {},
 	})
 	nc := nextcloud.NewClient(ncSrv.URL, nextcloudtest.User, nextcloudtest.AppPassword, ncSrv.Client())
 

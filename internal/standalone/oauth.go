@@ -495,7 +495,9 @@ func (a *Server) redirectWith(w http.ResponseWriter, r *http.Request, req *authz
 	}
 	q.Set("iss", a.cfg.Issuer)
 	u.RawQuery = q.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	// req.redirect was checked against the client's registered redirect URIs
+	// in validateAuthz, as OAuth 2.1 requires.
+	http.Redirect(w, r, u.String(), http.StatusFound) //nolint:gosec // registered redirect URI, see above
 }
 
 func (a *Server) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {

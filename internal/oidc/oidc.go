@@ -302,7 +302,7 @@ func (o *Client) verify(ctx context.Context, raw string) (*auth.TokenInfo, error
 		return o.key(ctx, kid)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
+		return nil, fmt.Errorf("%w: %w", auth.ErrInvalidToken, err)
 	}
 	exp, _ := claims.GetExpirationTime()
 	sub, _ := claims.GetSubject()
@@ -341,7 +341,7 @@ func (o *Client) Middleware(resourceMetadataURL string) func(http.Handler) http.
 		w.Header().Set("WWW-Authenticate", "Bearer "+strings.Join(params, ", "))
 		http.Error(w, desc, status)
 	}
-	sdk := auth.RequireBearerToken(func(ctx context.Context, tok string, r *http.Request) (*auth.TokenInfo, error) {
+	sdk := auth.RequireBearerToken(func(ctx context.Context, tok string, _ *http.Request) (*auth.TokenInfo, error) {
 		if v, ok := ctx.Value(verifiedKey{}).(*verified); ok && v.raw == tok {
 			return v.info, nil
 		}
@@ -399,7 +399,7 @@ func (o *Client) Exchange(ctx context.Context, subject string, subjectExp time.T
 
 	d, err := o.discovery(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", nextcloud.ErrTokenExchange, err)
+		return "", fmt.Errorf("%w: %w", nextcloud.ErrTokenExchange, err)
 	}
 	form := url.Values{
 		"grant_type":           {grantTokenExchange},

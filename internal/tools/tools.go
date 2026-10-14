@@ -164,15 +164,15 @@ func mapErr(err error, what string) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, nextcloud.ErrUnauthorized):
-		return errors.New("Nextcloud authentication failed: Nextcloud rejected the credentials (app-password or exchanged token)")
+		return errors.New("Nextcloud authentication failed: Nextcloud rejected the credentials (app-password or exchanged token)") //nolint:staticcheck // user-facing, starts with a product name
 	case errors.Is(err, nextcloud.ErrNoCredentials):
 		return errors.New("missing Nextcloud credentials for this request")
 	case errors.Is(err, nextcloud.ErrTokenExchange):
-		return fmt.Errorf("could not obtain a Nextcloud token from the identity provider (%v)", err)
+		return fmt.Errorf("could not obtain a Nextcloud token from the identity provider (%w)", err)
 	case errors.Is(err, nextcloud.ErrNotFound):
 		return fmt.Errorf("%s not found", what)
 	case errors.Is(err, context.DeadlineExceeded):
-		return errors.New("Nextcloud did not answer in time")
+		return errors.New("Nextcloud did not answer in time") //nolint:staticcheck // user-facing, starts with a product name
 	}
 	return err
 }
@@ -205,11 +205,11 @@ func (t *handlers) listFeeds(ctx context.Context, _ *mcp.CallToolRequest, _ List
 	return nil, out, nil
 }
 
-func clamp(v, def, max int) int {
+func clamp(v, def, limit int) int {
 	if v <= 0 {
 		return def
 	}
-	return min(v, max)
+	return min(v, limit)
 }
 
 func (t *handlers) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListItemsIn) (*mcp.CallToolResult, ListItemsOut, error) {
@@ -291,14 +291,14 @@ func (t *handlers) getItem(ctx context.Context, _ *mcp.CallToolRequest, in GetIt
 	if err != nil {
 		return nil, ItemOut{}, mapErr(err, fmt.Sprintf("item %d", in.ID))
 	}
-	max := clamp(in.MaxBodyChars, defaultBodyChars, maxBodyChars)
+	bodyChars := clamp(in.MaxBodyChars, defaultBodyChars, maxBodyChars)
 	out := toItemOut(it, false, 0)
 	body := it.Body
 	if format != "html" {
 		body = htmlToText(body)
 	}
 	out.BodyLength = utf8.RuneCountInString(body)
-	out.Body, out.BodyTruncated = truncate(body, max)
+	out.Body, out.BodyTruncated = truncate(body, bodyChars)
 	return nil, out, nil
 }
 

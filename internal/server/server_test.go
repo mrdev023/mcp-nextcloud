@@ -119,7 +119,7 @@ func TestOAuthRoutes(t *testing.T) {
 // -> validation -> token exchange -> Nextcloud called with the exchanged
 // token only. It also checks that no token reaches the logs.
 func TestOIDCEndToEnd(t *testing.T) {
-	f := oidctest.NewIdP(t)
+	f := oidctest.NewIDP(t)
 
 	var mu sync.Mutex
 	var seen []string
@@ -231,7 +231,7 @@ func TestOIDCEndToEnd(t *testing.T) {
 		t.Errorf("exchanges = %d, want 2 (one per user, then cached)", n)
 	}
 
-	// IdP refusing the exchange gives a clear tool error.
+	// IDP refusing the exchange gives a clear tool error.
 	f.SetExchange(oidctest.Exchange{Status: http.StatusBadRequest, TokenType: "Bearer", ExpiresIn: 300})
 	sc := connect(f.Sign(f.Claims("carol")))
 	defer sc.Close()

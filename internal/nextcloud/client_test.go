@@ -22,7 +22,7 @@ func newTestServer(t *testing.T, routes map[string]http.HandlerFunc) (*Client, *
 
 func TestListFeeds(t *testing.T) {
 	c, _ := newTestServer(t, map[string]http.HandlerFunc{
-		"GET feeds": func(w http.ResponseWriter, r *http.Request) {
+		"GET feeds": func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, map[string]any{
 				"feeds":        []map[string]any{{"id": 1, "url": "https://ex.org/rss", "title": "Ex", "folderId": nil, "unreadCount": 3}},
 				"starredCount": 2,
@@ -41,7 +41,7 @@ func TestListFeeds(t *testing.T) {
 
 func TestListItemsQueryAndDecoding(t *testing.T) {
 	c, calls := newTestServer(t, map[string]http.HandlerFunc{
-		"GET items": func(w http.ResponseWriter, r *http.Request) {
+		"GET items": func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, map[string]any{"items": []map[string]any{
 				{"id": 10, "title": "A", "unread": true, "starred": false, "feedId": 1},
 				{"id": 9, "title": "B", "isUnread": false, "isStarred": true, "feedId": 1},
@@ -87,7 +87,7 @@ func TestGetItem(t *testing.T) {
 }
 
 func TestMarkAndStar(t *testing.T) {
-	ok := func(w http.ResponseWriter, r *http.Request) {}
+	ok := func(http.ResponseWriter, *http.Request) {}
 	c, calls := newTestServer(t, map[string]http.HandlerFunc{
 		"POST items/3/read":          ok,
 		"POST items/read/multiple":   ok,
@@ -122,7 +122,7 @@ func TestMarkAndStar(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	c, srv := newTestServer(t, map[string]http.HandlerFunc{
-		"GET folders": func(w http.ResponseWriter, r *http.Request) {
+		"GET folders": func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			writeJSON(w, map[string]string{"message": "boom"})
 		},
