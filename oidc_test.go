@@ -23,6 +23,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
 )
 
 func setEnv(t *testing.T, kv map[string]string) {
@@ -359,16 +362,16 @@ func TestTokenExchange(t *testing.T) {
 	f.mu.Lock()
 	f.tokenType = "N_A"
 	f.mu.Unlock()
-	if _, err := o.Exchange(ctx, f.sign(f.claims("erin")), exp); !errors.Is(err, ErrTokenExchange) {
+	if _, err := o.Exchange(ctx, f.sign(f.claims("erin")), exp); !errors.Is(err, nextcloud.ErrTokenExchange) {
 		t.Errorf("token_type N_A: err = %v", err)
 	}
 
-	// IdP refusal surfaces as ErrTokenExchange with the OAuth error code.
+	// IdP refusal surfaces as nextcloud.ErrTokenExchange with the OAuth error code.
 	f.mu.Lock()
 	f.tokenType, f.exchangeStatus = "Bearer", http.StatusBadRequest
 	f.mu.Unlock()
 	_, err = o.Exchange(ctx, f.sign(f.claims("frank")), exp)
-	if !errors.Is(err, ErrTokenExchange) || !strings.Contains(err.Error(), "invalid_grant") {
+	if !errors.Is(err, nextcloud.ErrTokenExchange) || !strings.Contains(err.Error(), "invalid_grant") {
 		t.Errorf("refused exchange: err = %v", err)
 	}
 }
@@ -391,50 +394,6 @@ func TestExchangeCacheBounded(t *testing.T) {
 	}
 }
 
-func TestClientTokenSource(t *testing.T) {
-	var got string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("Authorization")
-		writeJSON(w, map[string]any{"folders": []any{}})
-	}))
-	defer srv.Close()
-
-	anon := NewNewsClient(srv.URL, "", "", srv.Client())
-	if _, err := anon.ListFolders(context.Background()); !errors.Is(err, ErrNoCredentials) {
-		t.Fatalf("no credentials: err = %v", err)
-	}
-	src := func(context.Context) (string, error) { return "tok-1", nil }
-	basic := NewNewsClient(srv.URL, "u", "p", srv.Client())
-	if _, err := basic.ListFolders(WithTokenSource(context.Background(), src)); err != nil || got != "Bearer tok-1" {
-		t.Fatalf("token source must win over basic: Authorization = %q, err = %v", got, err)
-	}
-	failing := func(context.Context) (string, error) { return "", fmt.Errorf("%w: boom", ErrTokenExchange) }
-	if _, err := anon.ListFolders(WithTokenSource(context.Background(), failing)); !errors.Is(err, ErrTokenExchange) {
-		t.Fatalf("failing source: err = %v", err)
-	}
-}
-
-func TestBearerFromHeader(t *testing.T) {
-	for in, want := range map[string]string{
-		"Bearer abc":     "abc",
-		"bearer  abc ":   "abc",
-		"Basic abc":      "",
-		"Bearer":         "",
-		"Bearer a b":     "",
-		"":               "",
-		"Bearer\tabc":    "",
-		"BEARER x.y.z-_": "x.y.z-_",
-	} {
-		h := http.Header{}
-		if in != "" {
-			h.Set("Authorization", in)
-		}
-		if got := bearerFromHeader(h); got != want {
-			t.Errorf("bearerFromHeader(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // TestOIDCEndToEnd runs the whole chain: MCP client with a JWT for news-mcp
 // -> validation -> token exchange -> Nextcloud called with the exchanged
 // token only. It also checks that no token reaches the logs.
@@ -443,7 +402,7 @@ func TestOIDCEndToEnd(t *testing.T) {
 
 	var mu sync.Mutex
 	var seen []string
-	nextcloud := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ncSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a := r.Header.Get("Authorization")
 		mu.Lock()
 		seen = append(seen, a)
@@ -454,12 +413,12 @@ func TestOIDCEndToEnd(t *testing.T) {
 		}
 		writeJSON(w, map[string]any{"feeds": []map[string]any{{"id": 1, "title": strings.TrimPrefix(a, "Bearer ")}}, "folders": []any{}})
 	}))
-	defer nextcloud.Close()
+	defer ncSrv.Close()
 
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	setEnv(t, map[string]string{
-		"NEXTCLOUD_URL": nextcloud.URL, "MCP_AUTH_MODE": "oidc", "MCP_BASE_URL": "https://news.example",
+		"NEXTCLOUD_URL": ncSrv.URL, "MCP_AUTH_MODE": "oidc", "MCP_BASE_URL": "https://news.example",
 		"MCP_OIDC_ISSUER": f.srv.URL, "MCP_OIDC_AUDIENCE": testAudience, "MCP_OIDC_CLIENT_ID": testClientID,
 		"MCP_OIDC_CLIENT_SECRET": testClientSecret, "MCP_OIDC_EXCHANGE_AUDIENCE": testUpstreamAud,
 	})
@@ -467,7 +426,7 @@ func TestOIDCEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(buildHandler(cfg, logger, NewNewsClient(nextcloud.URL, "", "", nextcloud.Client()), newTestOIDC(f, logger)))
+	srv := httptest.NewServer(buildHandler(cfg, logger, nextcloud.NewClient(ncSrv.URL, "", "", ncSrv.Client()), newTestOIDC(f, logger)))
 	defer srv.Close()
 
 	// Protected resource metadata points at the external issuer.
@@ -576,3 +535,5 @@ func TestOIDCEndToEnd(t *testing.T) {
 		}
 	}
 }
+
+var writeJSON = nextcloudtest.WriteJSON

@@ -24,6 +24,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 )
 
 var version = "dev"
@@ -235,7 +237,7 @@ const (
 
 // buildHandler wires the MCP server, the authentication layer selected by
 // cfg.AuthMode and the HTTP routes.
-func buildHandler(cfg *config, log *slog.Logger, nc *NewsClient, idp *OIDC) http.Handler {
+func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *OIDC) http.Handler {
 	issuer := cfg.BaseURL.String()
 	basePath := strings.TrimRight(cfg.BaseURL.Path, "/")
 	resource := issuer + "/mcp"
@@ -350,7 +352,7 @@ func run() error {
 			Logger:           log,
 		})
 	}
-	nc := NewNewsClient(cfg.NextcloudURL, user, pass, &http.Client{
+	nc := nextcloud.NewClient(cfg.NextcloudURL, user, pass, &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			Proxy:               http.ProxyFromEnvironment,

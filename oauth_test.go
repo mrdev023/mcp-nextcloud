@@ -16,6 +16,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
 )
 
 type bearerRT struct{ tok string }
@@ -28,14 +31,15 @@ func (b bearerRT) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // TestEndToEnd exercises DCR -> authorize -> token -> authenticated MCP calls.
 func TestEndToEnd(t *testing.T) {
-	nc, calls := newTestServer(t, map[string]func(http.ResponseWriter, *http.Request){
+	ncSrv := nextcloudtest.NewServer(t, map[string]http.HandlerFunc{
 		"GET items": func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(w, map[string]any{"items": []map[string]any{
+			nextcloudtest.WriteJSON(w, map[string]any{"items": []map[string]any{
 				{"id": 5, "title": "Hello", "body": "<p>Hello <b>world</b></p>", "unread": true, "feedId": 1, "pubDate": 1700000000},
 			}})
 		},
 		"POST items/read/multiple": func(w http.ResponseWriter, r *http.Request) {},
 	})
+	nc := nextcloud.NewClient(ncSrv.URL, nextcloudtest.User, nextcloudtest.AppPassword, ncSrv.Client())
 
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
@@ -186,7 +190,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil || res.IsError {
 		t.Fatalf("mark read: %v %+v", err, res)
 	}
-	if b := (*calls)[len(*calls)-1].body; b != `{"itemIds":[1,3]}` {
+	if b := ncSrv.LastCall().Body; b != `{"itemIds":[1,3]}` {
 		t.Errorf("mark read body %q", b)
 	}
 
@@ -238,7 +242,7 @@ func TestOAuthRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(buildHandler(cfg, logger, NewNewsClient("https://cloud.example", "u", "p", nil), nil))
+	srv := httptest.NewServer(buildHandler(cfg, logger, nextcloud.NewClient("https://cloud.example", "u", "p", nil), nil))
 	defer srv.Close()
 
 	for path, want := range map[string]int{

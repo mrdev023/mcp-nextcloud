@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 )
 
 const (
@@ -136,7 +138,7 @@ type GetUpdatedIn struct {
 
 // ---------- registration ----------
 
-func registerTools(s *mcp.Server, nc *NewsClient) {
+func registerTools(s *mcp.Server, nc *nextcloud.Client) {
 	t := &tools{nc: nc}
 	yes, no := true, false
 
@@ -205,20 +207,20 @@ func registerTools(s *mcp.Server, nc *NewsClient) {
 	}, t.getUpdated)
 }
 
-type tools struct{ nc *NewsClient }
+type tools struct{ nc *nextcloud.Client }
 
 // mapErr turns client errors into clean, user-facing tool errors.
 func mapErr(err error, what string) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, ErrUnauthorized):
+	case errors.Is(err, nextcloud.ErrUnauthorized):
 		return errors.New("Nextcloud authentication failed: Nextcloud rejected the credentials (app-password or exchanged token)")
-	case errors.Is(err, ErrNoCredentials):
+	case errors.Is(err, nextcloud.ErrNoCredentials):
 		return errors.New("missing Nextcloud credentials for this request")
-	case errors.Is(err, ErrTokenExchange):
+	case errors.Is(err, nextcloud.ErrTokenExchange):
 		return fmt.Errorf("could not obtain a Nextcloud token from the identity provider (%v)", err)
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, nextcloud.ErrNotFound):
 		return fmt.Errorf("%s not found", what)
 	case errors.Is(err, context.DeadlineExceeded):
 		return errors.New("Nextcloud did not answer in time")
@@ -267,8 +269,8 @@ func (t *tools) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListIt
 		return nil, out, errors.New("offset must be >= 0")
 	}
 	limit := clamp(in.Limit, defaultListLimit, maxListLimit)
-	p := ListItemsParams{
-		Type:        TypeAll,
+	p := nextcloud.ListItemsParams{
+		Type:        nextcloud.TypeAll,
 		GetRead:     in.IncludeRead,
 		BatchSize:   limit,
 		Offset:      in.Offset,
@@ -277,11 +279,11 @@ func (t *tools) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListIt
 	}
 	switch {
 	case in.FeedID != nil:
-		p.Type, p.ID = TypeFeed, *in.FeedID
+		p.Type, p.ID = nextcloud.TypeFeed, *in.FeedID
 	case in.FolderID != nil:
-		p.Type, p.ID = TypeFolder, *in.FolderID
+		p.Type, p.ID = nextcloud.TypeFolder, *in.FolderID
 	case in.StarredOnly:
-		p.Type = TypeStarred
+		p.Type = nextcloud.TypeStarred
 	}
 	items, err := t.nc.ListItems(ctx, p)
 	if err != nil {
@@ -302,7 +304,7 @@ func (t *tools) listItems(ctx context.Context, _ *mcp.CallToolRequest, in ListIt
 }
 
 // matches is a local safety net for News versions that ignore `search`.
-func matches(it *Item, terms []string) bool {
+func matches(it *nextcloud.Item, terms []string) bool {
 	hay := strings.ToLower(it.Title + " " + it.Author + " " + it.Body)
 	for _, t := range terms {
 		if !strings.Contains(hay, t) {
@@ -424,12 +426,12 @@ func (t *tools) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in GetUp
 	if in.LastModified < 0 {
 		return nil, out, errors.New("lastModified must be >= 0")
 	}
-	typ, id := TypeAll, int64(0)
+	typ, id := nextcloud.TypeAll, int64(0)
 	switch {
 	case in.FeedID != nil:
-		typ, id = TypeFeed, *in.FeedID
+		typ, id = nextcloud.TypeFeed, *in.FeedID
 	case in.FolderID != nil:
-		typ, id = TypeFolder, *in.FolderID
+		typ, id = nextcloud.TypeFolder, *in.FolderID
 	}
 	items, err := t.nc.GetUpdated(ctx, in.LastModified, typ, id)
 	if err != nil {
@@ -437,7 +439,7 @@ func (t *tools) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in GetUp
 	}
 	// Oldest changes first so that NextLastModified is a valid resume point
 	// even when the result is truncated.
-	slices.SortFunc(items, func(a, b Item) int {
+	slices.SortFunc(items, func(a, b nextcloud.Item) int {
 		if c := cmp.Compare(a.LastModified, b.LastModified); c != 0 {
 			return c
 		}
@@ -458,7 +460,7 @@ func (t *tools) getUpdated(ctx context.Context, _ *mcp.CallToolRequest, in GetUp
 
 // ---------- helpers ----------
 
-func toItemOut(it *Item, withBody bool, bodyChars int) ItemOut {
+func toItemOut(it *nextcloud.Item, withBody bool, bodyChars int) ItemOut {
 	o := ItemOut{
 		ID: it.ID, Title: it.Title, URL: it.URL, Author: it.Author, FeedID: it.FeedID,
 		Unread: it.Unread, Starred: it.Starred, LastModified: it.LastModified,

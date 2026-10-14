@@ -35,6 +35,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/mrdev023/mcp-nextcloud-news/internal/httpx"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 )
 
 // Only asymmetric algorithms: "none" and HMAC (HS*) are never accepted.
@@ -56,10 +59,7 @@ const (
 // variable so tests can disable it).
 var jwksMinRefresh = 30 * time.Second
 
-var (
-	ErrTokenExchange = errors.New("token exchange failed")
-	errNoKey         = errors.New("no matching signing key")
-)
+var errNoKey = errors.New("no matching signing key")
 
 type OIDCConfig struct {
 	Issuer           string   // MCP_OIDC_ISSUER
@@ -349,7 +349,7 @@ func (o *OIDC) Middleware(resourceMetadataURL string) func(http.Handler) http.Ha
 	return func(next http.Handler) http.Handler {
 		inner := sdk(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			raw := bearerFromHeader(r.Header)
+			raw := httpx.BearerFromHeader(r.Header)
 			if raw == "" {
 				challenge(w, http.StatusUnauthorized, "", "missing bearer token")
 				return
@@ -394,7 +394,7 @@ func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Tim
 
 	d, err := o.discovery(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrTokenExchange, err)
+		return "", fmt.Errorf("%w: %v", nextcloud.ErrTokenExchange, err)
 	}
 	form := url.Values{
 		"grant_type":           {grantTokenExchange},
@@ -416,7 +416,7 @@ func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Tim
 	req.SetBasicAuth(url.QueryEscape(o.cfg.ClientID), url.QueryEscape(o.cfg.ClientSecret))
 	resp, err := o.cfg.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: token endpoint unreachable", ErrTokenExchange)
+		return "", fmt.Errorf("%w: token endpoint unreachable", nextcloud.ErrTokenExchange)
 	}
 	defer resp.Body.Close()
 	body := io.LimitReader(resp.Body, idpBodyLimit)
@@ -428,7 +428,7 @@ func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Tim
 		if e.Code == "" {
 			e.Code = fmt.Sprintf("HTTP %d", resp.StatusCode)
 		}
-		return "", fmt.Errorf("%w: %s", ErrTokenExchange, e.Code)
+		return "", fmt.Errorf("%w: %s", nextcloud.ErrTokenExchange, e.Code)
 	}
 	var tr struct {
 		AccessToken     string `json:"access_token"`
@@ -437,15 +437,15 @@ func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Tim
 		ExpiresIn       int64  `json:"expires_in"`
 	}
 	if err := json.NewDecoder(body).Decode(&tr); err != nil || tr.AccessToken == "" {
-		return "", fmt.Errorf("%w: malformed token response", ErrTokenExchange)
+		return "", fmt.Errorf("%w: malformed token response", nextcloud.ErrTokenExchange)
 	}
 	// RFC 8693 requires token_type; "N_A" means the result is not an access
 	// token. Tolerate a missing value, which some providers omit.
 	if tr.TokenType != "" && !strings.EqualFold(tr.TokenType, "Bearer") {
-		return "", fmt.Errorf("%w: unexpected token_type %q", ErrTokenExchange, tr.TokenType)
+		return "", fmt.Errorf("%w: unexpected token_type %q", nextcloud.ErrTokenExchange, tr.TokenType)
 	}
 	if tr.IssuedTokenType != "" && tr.IssuedTokenType != tokenTypeAccessToken {
-		return "", fmt.Errorf("%w: unexpected issued_token_type", ErrTokenExchange)
+		return "", fmt.Errorf("%w: unexpected issued_token_type", nextcloud.ErrTokenExchange)
 	}
 
 	exp := subjectExp
@@ -494,12 +494,12 @@ func (o *OIDC) ExchangeMiddleware() mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if extra := req.GetExtra(); extra != nil {
-				if raw := bearerFromHeader(extra.Header); raw != "" {
+				if raw := httpx.BearerFromHeader(extra.Header); raw != "" {
 					var exp time.Time
 					if extra.TokenInfo != nil {
 						exp = extra.TokenInfo.Expiration
 					}
-					ctx = WithTokenSource(ctx, func(ctx context.Context) (string, error) {
+					ctx = nextcloud.WithTokenSource(ctx, func(ctx context.Context) (string, error) {
 						return o.Exchange(ctx, raw, exp)
 					})
 				}

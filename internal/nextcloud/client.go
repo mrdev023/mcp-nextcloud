@@ -1,4 +1,5 @@
-package main
+// Package nextcloud is a client for the Nextcloud News API v1-3.
+package nextcloud
 
 import (
 	"bytes"
@@ -36,6 +37,9 @@ var (
 	ErrUnauthorized  = errors.New("nextcloud rejected the credentials")
 	ErrNoCredentials = errors.New("no Nextcloud credentials for this request")
 	ErrNotFound      = errors.New("not found")
+	// ErrTokenExchange is wrapped by a TokenSource that could not obtain a
+	// Nextcloud token from the identity provider.
+	ErrTokenExchange = errors.New("token exchange failed")
 )
 
 // APIError is returned for unexpected non-2xx responses.
@@ -138,32 +142,20 @@ func WithTokenSource(ctx context.Context, src TokenSource) context.Context {
 	return context.WithValue(ctx, tokenSourceKey{}, src)
 }
 
-// bearerFromHeader extracts the token of an "Authorization: Bearer <token>"
-// header, or "" if absent or malformed.
-func bearerFromHeader(h http.Header) string {
-	scheme, tok, ok := strings.Cut(strings.TrimSpace(h.Get("Authorization")), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-	tok = strings.TrimSpace(tok)
-	if tok == "" || strings.ContainsAny(tok, " \t\r\n") {
-		return ""
-	}
-	return tok
-}
-
-type NewsClient struct {
+// Client calls the News API with either a per-request bearer token (see
+// WithTokenSource) or a server-wide app-password.
+type Client struct {
 	base string // ends with "/index.php/apps/news/api/v1-3/"
 	user string
 	pass string
 	http *http.Client
 }
 
-func NewNewsClient(nextcloudURL, user, appPassword string, hc *http.Client) *NewsClient {
+func NewClient(nextcloudURL, user, appPassword string, hc *http.Client) *Client {
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &NewsClient{
+	return &Client{
 		base: strings.TrimRight(nextcloudURL, "/") + "/index.php/apps/news/api/v1-3/",
 		user: user,
 		pass: appPassword,
@@ -171,7 +163,7 @@ func NewNewsClient(nextcloudURL, user, appPassword string, hc *http.Client) *New
 	}
 }
 
-func (c *NewsClient) do(ctx context.Context, method, path string, q url.Values, body any, out any) error {
+func (c *Client) do(ctx context.Context, method, path string, q url.Values, body any, out any) error {
 	u := c.base + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()
@@ -250,7 +242,7 @@ func (c *NewsClient) do(ctx context.Context, method, path string, q url.Values, 
 	return nil
 }
 
-func (c *NewsClient) ListFeeds(ctx context.Context) (*FeedsResponse, error) {
+func (c *Client) ListFeeds(ctx context.Context) (*FeedsResponse, error) {
 	var r FeedsResponse
 	if err := c.do(ctx, http.MethodGet, "feeds", nil, nil, &r); err != nil {
 		return nil, err
@@ -258,7 +250,7 @@ func (c *NewsClient) ListFeeds(ctx context.Context) (*FeedsResponse, error) {
 	return &r, nil
 }
 
-func (c *NewsClient) ListFolders(ctx context.Context) ([]Folder, error) {
+func (c *Client) ListFolders(ctx context.Context) ([]Folder, error) {
 	var r struct {
 		Folders []Folder `json:"folders"`
 	}
@@ -268,7 +260,7 @@ func (c *NewsClient) ListFolders(ctx context.Context) ([]Folder, error) {
 	return r.Folders, nil
 }
 
-func (c *NewsClient) ListItems(ctx context.Context, p ListItemsParams) ([]Item, error) {
+func (c *Client) ListItems(ctx context.Context, p ListItemsParams) ([]Item, error) {
 	q := url.Values{}
 	q.Set("type", strconv.Itoa(int(p.Type)))
 	q.Set("id", strconv.FormatInt(p.ID, 10))
@@ -295,7 +287,7 @@ func (c *NewsClient) ListItems(ctx context.Context, p ListItemsParams) ([]Item, 
 // GetItem fetches one item by id. The v1-3 API has no single-item endpoint,
 // so we request the newest item (all feeds, read included) with an id lower
 // than id+1, i.e. the item itself if it exists.
-func (c *NewsClient) GetItem(ctx context.Context, id int64) (*Item, error) {
+func (c *Client) GetItem(ctx context.Context, id int64) (*Item, error) {
 	items, err := c.ListItems(ctx, ListItemsParams{
 		Type:      TypeAll,
 		GetRead:   true,
@@ -312,7 +304,7 @@ func (c *NewsClient) GetItem(ctx context.Context, id int64) (*Item, error) {
 }
 
 // GetUpdated returns all items modified since lastModified (unix seconds).
-func (c *NewsClient) GetUpdated(ctx context.Context, lastModified int64, t ItemType, id int64) ([]Item, error) {
+func (c *Client) GetUpdated(ctx context.Context, lastModified int64, t ItemType, id int64) ([]Item, error) {
 	q := url.Values{}
 	q.Set("lastModified", strconv.FormatInt(lastModified, 10))
 	q.Set("type", strconv.Itoa(int(t)))
@@ -326,14 +318,14 @@ func (c *NewsClient) GetUpdated(ctx context.Context, lastModified int64, t ItemT
 	return r.Items, nil
 }
 
-func (c *NewsClient) MarkRead(ctx context.Context, ids ...int64) error {
+func (c *Client) MarkRead(ctx context.Context, ids ...int64) error {
 	if len(ids) == 1 {
 		return c.do(ctx, http.MethodPost, fmt.Sprintf("items/%d/read", ids[0]), nil, nil, nil)
 	}
 	return c.do(ctx, http.MethodPost, "items/read/multiple", nil, map[string][]int64{"itemIds": ids}, nil)
 }
 
-func (c *NewsClient) MarkUnread(ctx context.Context, ids ...int64) error {
+func (c *Client) MarkUnread(ctx context.Context, ids ...int64) error {
 	if len(ids) == 1 {
 		return c.do(ctx, http.MethodPost, fmt.Sprintf("items/%d/unread", ids[0]), nil, nil, nil)
 	}
@@ -341,15 +333,15 @@ func (c *NewsClient) MarkUnread(ctx context.Context, ids ...int64) error {
 }
 
 // MarkAllRead marks every item with id <= newestItemID as read.
-func (c *NewsClient) MarkAllRead(ctx context.Context, newestItemID int64) error {
+func (c *Client) MarkAllRead(ctx context.Context, newestItemID int64) error {
 	q := url.Values{"newestItemId": {strconv.FormatInt(newestItemID, 10)}}
 	return c.do(ctx, http.MethodPost, "items/read", q, nil, nil)
 }
 
-func (c *NewsClient) Star(ctx context.Context, id int64) error {
+func (c *Client) Star(ctx context.Context, id int64) error {
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("items/%d/star", id), nil, nil, nil)
 }
 
-func (c *NewsClient) Unstar(ctx context.Context, id int64) error {
+func (c *Client) Unstar(ctx context.Context, id int64) error {
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("items/%d/unstar", id), nil, nil, nil)
 }
