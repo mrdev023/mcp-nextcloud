@@ -31,7 +31,7 @@ export NEXTCLOUD_URL=https://cloud.example.com
 export NEXTCLOUD_USER='your-user'
 export NEXTCLOUD_APP_PASSWORD='xxxxx-xxxxx-xxxxx-xxxxx-xxxxx'   # Nextcloud: Settings → Security
 export MCP_AUTH_PASSWORD='a long passphrase'                    # typed when a client asks for access
-go run github.com/mrdev023/mcp-nextcloud/cmd/news-mcp@latest
+go run github.com/mrdev023/mcp-nextcloud/cmd/mcp-nextcloud@latest
 ```
 
 Then connect a client, for example Claude Code:
@@ -82,7 +82,7 @@ docker run -d -p 8080:8080 \
 
 ```sh
 go test ./...
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o news-mcp ./cmd/news-mcp
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o mcp-nextcloud ./cmd/mcp-nextcloud
 ```
 
 An optional Nix shell (`shell.nix`) provides Go, gopls and golangci-lint; with direnv, run `direnv allow`. See [Architecture](docs/architecture.md) for how the code is organised.

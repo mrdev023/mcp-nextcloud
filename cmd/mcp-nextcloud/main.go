@@ -1,5 +1,5 @@
-// Command news-mcp is an MCP server (Streamable HTTP + OAuth) exposing a
-// Nextcloud News account as tools.
+// Command mcp-nextcloud is an MCP server (Streamable HTTP + OAuth) exposing
+// Nextcloud apps (News for now) as tools.
 package main
 
 import (
@@ -23,7 +23,7 @@ var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "news-mcp:", err)
+		fmt.Fprintln(os.Stderr, "mcp-nextcloud:", err)
 		os.Exit(1)
 	}
 }
@@ -91,7 +91,7 @@ func run() error {
 	} else {
 		attrs = append(attrs, "dcr", cfg.AllowDCR, "static_client", cfg.ClientID != "")
 	}
-	log.Info("news-mcp listening", attrs...)
+	log.Info("mcp-nextcloud listening", attrs...)
 
 	select {
 	case err := <-errc:

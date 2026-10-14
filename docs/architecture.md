@@ -6,7 +6,7 @@ news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no databa
 
 | Path | Contents |
 |---|---|
-| `cmd/news-mcp` | Entry point (`run`): configuration, HTTP server, signals and graceful shutdown, memory limit, `version` |
+| `cmd/mcp-nextcloud` | Entry point (`run`): configuration, HTTP server, signals and graceful shutdown, memory limit, `version` |
 | `internal/config` | Configuration loading and validation from the environment (`config.Load`) |
 | `internal/server` | HTTP routing (`server.NewHandler`): MCP server, authentication layer, discovery documents |
 | `internal/nextcloud` | Core Nextcloud client shared by every app module (`Client.Do`): credential selection, request building, response size limit, 401/404/error mapping |
@@ -162,7 +162,7 @@ go test ./internal/tools/news -run TestToolSnapshots -update
 
 ## Build and release
 
-- **Binary.** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=…" ./cmd/news-mcp` produces a static binary of about 11 MB.
+- **Binary.** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=…" ./cmd/mcp-nextcloud` produces a static binary of about 11 MB.
 - **Image.** The `Dockerfile` builds on the native platform and cross-compiles with `GOOS`/`GOARCH`, so multi-arch images need no emulation. The final stage is `gcr.io/distroless/static-debian12:nonroot`.
 - **CI.**
   - GitHub Actions runs gofmt, vet, golangci-lint, tests and a build on every push and pull request.

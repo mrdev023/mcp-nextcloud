@@ -39,7 +39,7 @@ jobs:
         run: go test ./...
 
       - name: Build static binary
-        run: go build -trimpath -ldflags="-s -w" -o news-mcp ./cmd/news-mcp
+        run: go build -trimpath -ldflags="-s -w" -o mcp-nextcloud ./cmd/mcp-nextcloud
 
   image:
     needs: test
