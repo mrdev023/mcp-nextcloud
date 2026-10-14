@@ -26,6 +26,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
@@ -81,8 +82,8 @@ func loadConfig() (*config, error) {
 	default:
 		return nil, errors.New("MCP_AUTH_MODE must be standalone or oidc")
 	}
-	oidc := c.AuthMode == authModeOIDC
-	if oidc {
+	isOIDC := c.AuthMode == authModeOIDC
+	if isOIDC {
 		c.OIDCIssuer = env("MCP_OIDC_ISSUER", "")
 		c.OIDCAudience = env("MCP_OIDC_AUDIENCE", "")
 		c.OIDCRequiredScopes = strings.FieldsFunc(env("MCP_OIDC_REQUIRED_SCOPES", ""), func(r rune) bool { return r == ' ' || r == ',' })
@@ -93,7 +94,7 @@ func loadConfig() (*config, error) {
 	}
 
 	required := map[string]string{"NEXTCLOUD_URL": c.NextcloudURL}
-	if oidc {
+	if isOIDC {
 		required["MCP_OIDC_ISSUER"] = c.OIDCIssuer
 		required["MCP_OIDC_CLIENT_ID"] = c.OIDCClientID
 		required["MCP_OIDC_CLIENT_SECRET"] = c.OIDCClientSecret
@@ -116,7 +117,7 @@ func loadConfig() (*config, error) {
 	if u, err := url.Parse(c.NextcloudURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return nil, errors.New("NEXTCLOUD_URL must be an absolute http(s) URL")
 	}
-	if !oidc && len(c.AuthPassword) < 12 {
+	if !isOIDC && len(c.AuthPassword) < 12 {
 		return nil, errors.New("MCP_AUTH_PASSWORD must be at least 12 characters")
 	}
 
@@ -132,7 +133,7 @@ func loadConfig() (*config, error) {
 		c.BaseURL.RawQuery != "" || c.BaseURL.Fragment != "" {
 		return nil, errors.New("MCP_BASE_URL must be an absolute http(s) URL without query or fragment")
 	}
-	if oidc {
+	if isOIDC {
 		u, err := url.Parse(c.OIDCIssuer)
 		if err != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" ||
 			(u.Scheme != "https" && !(u.Scheme == "http" && isLoopbackHost(u.Hostname()))) {
@@ -238,7 +239,7 @@ const (
 
 // buildHandler wires the MCP server, the authentication layer selected by
 // cfg.AuthMode and the HTTP routes.
-func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *OIDC) http.Handler {
+func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *oidc.Client) http.Handler {
 	issuer := cfg.BaseURL.String()
 	basePath := strings.TrimRight(cfg.BaseURL.Path, "/")
 	resource := issuer + "/mcp"
@@ -334,7 +335,7 @@ func run() error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
 
 	user, pass := cfg.NextcloudUser, cfg.AppPassword
-	var idp *OIDC
+	var idp *oidc.Client
 	if cfg.AuthMode == authModeOIDC {
 		// Never fall back to a shared identity: every Nextcloud call uses a
 		// token exchanged for the calling user.
@@ -342,7 +343,7 @@ func run() error {
 			log.Warn("oidc mode: NEXTCLOUD_USER / NEXTCLOUD_APP_PASSWORD are ignored")
 		}
 		user, pass = "", ""
-		idp = NewOIDC(OIDCConfig{
+		idp = oidc.New(oidc.Config{
 			Issuer:           cfg.OIDCIssuer,
 			Audience:         cfg.OIDCAudience,
 			RequiredScopes:   cfg.OIDCRequiredScopes,

@@ -1,6 +1,4 @@
-package main
-
-// External OIDC provider mode (MCP_AUTH_MODE=oidc).
+// Package oidc implements the external OIDC provider mode (MCP_AUTH_MODE=oidc).
 //
 // news-mcp is an OAuth 2.1 resource server for an external authorization
 // server, as the MCP authorization spec describes:
@@ -11,6 +9,7 @@ package main
 //   - to call Nextcloud it never forwards the token it received: it acts as
 //     an OAuth client and obtains a distinct Nextcloud-audience token through
 //     an RFC 8693 token exchange, which is cached per incoming token.
+package oidc
 
 import (
 	"context"
@@ -19,6 +18,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,7 +61,10 @@ var jwksMinRefresh = 30 * time.Second
 
 var errNoKey = errors.New("no matching signing key")
 
-type OIDCConfig struct {
+var b64 = base64.RawURLEncoding
+
+// Config configures the OIDC resource server and token exchange.
+type Config struct {
 	Issuer           string   // MCP_OIDC_ISSUER
 	Audience         string   // expected aud of incoming tokens
 	RequiredScopes   []string // optional
@@ -73,8 +76,9 @@ type OIDCConfig struct {
 	Logger           *slog.Logger
 }
 
-type OIDC struct {
-	cfg OIDCConfig
+// Client validates incoming access tokens and exchanges them for Nextcloud tokens.
+type Client struct {
+	cfg Config
 
 	mu          sync.Mutex
 	discovered  *oidcDiscovery
@@ -96,16 +100,17 @@ type cachedToken struct {
 	exp   time.Time
 }
 
-func NewOIDC(cfg OIDCConfig) *OIDC {
+// New returns a Client. Discovery and JWKS are fetched lazily.
+func New(cfg Config) *Client {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &OIDC{cfg: cfg, cache: map[[32]byte]cachedToken{}}
+	return &Client{cfg: cfg, cache: map[[32]byte]cachedToken{}}
 }
 
 // ---------- discovery and JWKS ----------
 
-func (o *OIDC) getJSON(ctx context.Context, u string, out any) error {
+func (o *Client) getJSON(ctx context.Context, u string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
@@ -124,7 +129,7 @@ func (o *OIDC) getJSON(ctx context.Context, u string, out any) error {
 
 // discovery returns the issuer's OpenID Provider metadata, fetched once and
 // retried at most every discoveryRetry on failure.
-func (o *OIDC) discovery(ctx context.Context) (*oidcDiscovery, error) {
+func (o *Client) discovery(ctx context.Context) (*oidcDiscovery, error) {
 	o.mu.Lock()
 	if d := o.discovered; d != nil {
 		o.mu.Unlock()
@@ -209,7 +214,7 @@ func (k *jwk) publicKey() (any, error) {
 	return nil, fmt.Errorf("unsupported key type %q", k.Kty)
 }
 
-func (o *OIDC) refreshKeys(ctx context.Context) error {
+func (o *Client) refreshKeys(ctx context.Context) error {
 	d, err := o.discovery(ctx)
 	if err != nil {
 		return err
@@ -243,7 +248,7 @@ func (o *OIDC) refreshKeys(ctx context.Context) error {
 
 // key returns the verification key for kid, refreshing the JWKS when it is
 // stale or when an unknown kid shows up (key rotation), rate-limited.
-func (o *OIDC) key(ctx context.Context, kid string) (any, error) {
+func (o *Client) key(ctx context.Context, kid string) (any, error) {
 	lookup := func() (any, bool) {
 		if k, ok := o.keys[kid]; ok {
 			return k, true
@@ -283,7 +288,7 @@ func (o *OIDC) key(ctx context.Context, kid string) (any, error) {
 // ---------- incoming token validation ----------
 
 // verify validates a JWT access token issued for this server.
-func (o *OIDC) verify(ctx context.Context, raw string) (*auth.TokenInfo, error) {
+func (o *Client) verify(ctx context.Context, raw string) (*auth.TokenInfo, error) {
 	parser := jwt.NewParser(
 		jwt.WithValidMethods(allowedJWTAlgs),
 		jwt.WithIssuer(o.cfg.Issuer),
@@ -324,7 +329,7 @@ type verified struct {
 // point to the protected resource metadata, then hands over to the SDK's
 // RequireBearerToken (which reuses the validation result) so that the SDK
 // gets the TokenInfo it uses to bind sessions to users.
-func (o *OIDC) Middleware(resourceMetadataURL string) func(http.Handler) http.Handler {
+func (o *Client) Middleware(resourceMetadataURL string) func(http.Handler) http.Handler {
 	challenge := func(w http.ResponseWriter, status int, errCode, desc string) {
 		params := []string{fmt.Sprintf("resource_metadata=%q", resourceMetadataURL)}
 		if len(o.cfg.RequiredScopes) > 0 {
@@ -382,7 +387,7 @@ type exchangeError struct {
 // Exchange returns a Nextcloud-audience access token for the incoming
 // subject token, from cache when possible. subjectExp bounds the cache
 // lifetime so that an exchanged token never outlives the token it came from.
-func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Time) (string, error) {
+func (o *Client) Exchange(ctx context.Context, subject string, subjectExp time.Time) (string, error) {
 	key := sha256.Sum256([]byte(subject))
 	now := time.Now()
 	o.mu.Lock()
@@ -467,7 +472,7 @@ func (o *OIDC) Exchange(ctx context.Context, subject string, subjectExp time.Tim
 
 // storeLocked inserts into the bounded cache: expired entries go first, then
 // the entry closest to expiry.
-func (o *OIDC) storeLocked(key [32]byte, v cachedToken, now time.Time) {
+func (o *Client) storeLocked(key [32]byte, v cachedToken, now time.Time) {
 	if len(o.cache) >= exchangeCacheLimit {
 		for k, c := range o.cache {
 			if !now.Before(c.exp) {
@@ -490,7 +495,7 @@ func (o *OIDC) storeLocked(key [32]byte, v cachedToken, now time.Time) {
 
 // ExchangeMiddleware gives each MCP request a lazy Nextcloud credential: the
 // exchange only happens if a tool actually calls Nextcloud.
-func (o *OIDC) ExchangeMiddleware() mcp.Middleware {
+func (o *Client) ExchangeMiddleware() mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if extra := req.GetExtra(); extra != nil {
