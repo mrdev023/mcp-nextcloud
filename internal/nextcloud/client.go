@@ -67,20 +67,39 @@ type Client struct {
 	user string
 	pass string
 	http *http.Client
+	ua   string
+}
+
+// DefaultUserAgent is the User-Agent sent to Nextcloud unless WithUserAgent
+// overrides it. Nextcloud shows it as the name of the session in Settings ->
+// Security -> Devices & sessions.
+const DefaultUserAgent = "MCP Nextcloud"
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithUserAgent sets the User-Agent sent to Nextcloud.
+func WithUserAgent(ua string) Option {
+	return func(c *Client) { c.ua = ua }
 }
 
 // NewClient returns a Client for the Nextcloud instance at nextcloudURL.
 // user and appPassword may be empty when every call carries a TokenSource.
-func NewClient(nextcloudURL, user, appPassword string, hc *http.Client) *Client {
+func NewClient(nextcloudURL, user, appPassword string, hc *http.Client, opts ...Option) *Client {
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Client{
+	c := &Client{
 		base: strings.TrimRight(nextcloudURL, "/") + "/",
 		user: user,
 		pass: appPassword,
 		http: hc,
+		ua:   DefaultUserAgent,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Do sends a request to path, relative to the Nextcloud URL (for instance
@@ -118,6 +137,7 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 	} else {
 		return ErrNoCredentials
 	}
+	req.Header.Set("User-Agent", c.ua)
 	req.Header.Set("Accept", "application/json")
 	// Required: the News API routes are #[CORS]. Nextcloud's CORSMiddleware
 	// logs the session out and demands Basic auth unless the request passes

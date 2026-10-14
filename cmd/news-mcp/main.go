@@ -70,7 +70,7 @@ func run() error {
 			TLSHandshakeTimeout: 10 * time.Second,
 			ForceAttemptHTTP2:   true,
 		},
-	})
+	}, nextcloud.WithUserAgent(nextcloud.DefaultUserAgent+"/"+version))
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),

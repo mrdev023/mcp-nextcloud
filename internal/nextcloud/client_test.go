@@ -40,3 +40,18 @@ func TestClientTokenSource(t *testing.T) {
 		t.Fatalf("failing source: err = %v", err)
 	}
 }
+
+func TestUserAgent(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("User-Agent"))
+		writeJSON(w, map[string]any{})
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	_ = listFolders(ctx, NewClient(srv.URL, "u", "p", srv.Client()))
+	_ = listFolders(ctx, NewClient(srv.URL, "u", "p", srv.Client(), WithUserAgent("MCP Nextcloud/1.2.3")))
+	if len(got) != 2 || got[0] != "MCP Nextcloud" || got[1] != "MCP Nextcloud/1.2.3" {
+		t.Errorf("User-Agent = %q", got)
+	}
+}
