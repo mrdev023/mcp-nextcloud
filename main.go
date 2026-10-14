@@ -27,6 +27,7 @@ import (
 
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
+	"github.com/mrdev023/mcp-nextcloud-news/internal/standalone"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/tools"
 )
 
@@ -292,7 +293,7 @@ func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *oidc
 		return accessLog(log, mux)
 	}
 
-	as := NewAuthServer(OAuthConfig{
+	as := standalone.New(standalone.Config{
 		Issuer:             issuer,
 		Resource:           resource,
 		LoginPassword:      cfg.AuthPassword,
@@ -304,11 +305,11 @@ func buildHandler(cfg *config, log *slog.Logger, nc *nextcloud.Client, idp *oidc
 		Logger:             log,
 	})
 	prmDoc.AuthorizationServers = []string{issuer}
-	prmDoc.ScopesSupported = []string{scopeNews}
+	prmDoc.ScopesSupported = []string{standalone.Scope}
 	registerPRM()
 	bearer := auth.RequireBearerToken(as.VerifyAccessToken, &auth.RequireBearerTokenOptions{
 		ResourceMetadataURL: prmURL,
-		Scopes:              []string{scopeNews},
+		Scopes:              []string{standalone.Scope},
 		ClockSkew:           30 * time.Second,
 	})
 	// RFC 8414 section 3: well-known suffix inserted before the issuer path.

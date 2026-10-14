@@ -1,7 +1,5 @@
-package main
-
-// Minimal embedded OAuth 2.1 authorization server for the MCP authorization
-// spec (revision 2026-07-28):
+// Package standalone is a minimal embedded OAuth 2.1 authorization server
+// for the MCP authorization spec (revision 2026-07-28):
 //   - RFC 9728 protected resource metadata (served via the go-sdk helper)
 //   - RFC 8414 authorization server metadata
 //   - Authorization Code + PKCE (S256 mandatory) and refresh tokens
@@ -19,6 +17,7 @@ package main
 //
 // The resource owner authenticates on the /authorize page with
 // MCP_AUTH_PASSWORD. The Nextcloud app-password is never involved.
+package standalone
 
 import (
 	"context"
@@ -42,7 +41,8 @@ import (
 )
 
 const (
-	scopeNews       = "news"
+	// Scope is the only scope issued and required in standalone mode.
+	Scope           = "news"
 	accessTokenTTL  = time.Hour
 	refreshTokenTTL = 30 * 24 * time.Hour
 	authCodeTTL     = 5 * time.Minute
@@ -52,7 +52,8 @@ const (
 	loginFailureWindow = 15 * time.Minute
 )
 
-type OAuthConfig struct {
+// Config configures the embedded authorization server.
+type Config struct {
 	Issuer             string // public base URL, no trailing slash
 	Resource           string // canonical MCP endpoint URL
 	LoginPassword      string // MCP_AUTH_PASSWORD
@@ -64,16 +65,19 @@ type OAuthConfig struct {
 	Logger             *slog.Logger
 }
 
-type AuthServer struct {
-	cfg OAuthConfig
+// Server is the embedded authorization server. Its handlers serve RFC 8414
+// metadata, /authorize, /token and, optionally, /register.
+type Server struct {
+	cfg Config
 
 	mu        sync.Mutex
 	usedCodes map[string]time.Time // jti -> expiry
 	failures  []time.Time
 }
 
-func NewAuthServer(cfg OAuthConfig) *AuthServer {
-	return &AuthServer{cfg: cfg, usedCodes: map[string]time.Time{}}
+// New returns a Server for cfg.
+func New(cfg Config) *Server {
+	return &Server{cfg: cfg, usedCodes: map[string]time.Time{}}
 }
 
 // ---------- signed tokens ----------
@@ -107,14 +111,14 @@ func randomID() string {
 	return b64.EncodeToString(b)
 }
 
-func (a *AuthServer) mac(payload string) []byte {
+func (a *Server) mac(payload string) []byte {
 	m := hmac.New(sha256.New, a.cfg.SigningKey)
 	m.Write([]byte("news-mcp.v1."))
 	m.Write([]byte(payload))
 	return m.Sum(nil)
 }
 
-func (a *AuthServer) sign(c claims) string {
+func (a *Server) sign(c claims) string {
 	if c.Iat == 0 {
 		c.Iat = time.Now().Unix()
 	}
@@ -128,7 +132,7 @@ func (a *AuthServer) sign(c claims) string {
 
 var errBadToken = errors.New("invalid or expired token")
 
-func (a *AuthServer) parse(tok, typ string) (*claims, error) {
+func (a *Server) parse(tok, typ string) (*claims, error) {
 	p, s, ok := strings.Cut(tok, ".")
 	if !ok || len(tok) > 8192 {
 		return nil, errBadToken
@@ -152,7 +156,7 @@ func (a *AuthServer) parse(tok, typ string) (*claims, error) {
 }
 
 // VerifyAccessToken is the auth.TokenVerifier used on the MCP endpoint.
-func (a *AuthServer) VerifyAccessToken(_ context.Context, tok string, _ *http.Request) (*auth.TokenInfo, error) {
+func (a *Server) VerifyAccessToken(_ context.Context, tok string, _ *http.Request) (*auth.TokenInfo, error) {
 	c, err := a.parse(tok, typAccess)
 	if err != nil || c.Aud != a.cfg.Resource {
 		return nil, auth.ErrInvalidToken
@@ -182,7 +186,7 @@ var defaultStaticRedirects = []string{
 	"https://claude.com/api/mcp/auth_callback",
 }
 
-func (a *AuthServer) lookupClient(id string) (*client, bool) {
+func (a *Server) lookupClient(id string) (*client, bool) {
 	if id == "" {
 		return nil, false
 	}
@@ -314,7 +318,7 @@ type asMetadata struct {
 	IssParameterSupported             bool     `json:"authorization_response_iss_parameter_supported"`
 }
 
-func (a *AuthServer) MetadataHandler(w http.ResponseWriter, r *http.Request) {
+func (a *Server) MetadataHandler(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -328,7 +332,7 @@ func (a *AuthServer) MetadataHandler(w http.ResponseWriter, r *http.Request) {
 		Issuer:                            a.cfg.Issuer,
 		AuthorizationEndpoint:             a.cfg.Issuer + "/authorize",
 		TokenEndpoint:                     a.cfg.Issuer + "/token",
-		ScopesSupported:                   []string{scopeNews},
+		ScopesSupported:                   []string{Scope},
 		ResponseTypesSupported:            []string{"code"},
 		ResponseModesSupported:            []string{"query"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
@@ -345,7 +349,7 @@ func (a *AuthServer) MetadataHandler(w http.ResponseWriter, r *http.Request) {
 
 // ---------- dynamic client registration (RFC 7591) ----------
 
-func (a *AuthServer) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+func (a *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -402,7 +406,7 @@ func (a *AuthServer) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		"token_endpoint_auth_method": "none",
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
-		"scope":                      scopeNews,
+		"scope":                      Scope,
 	})
 }
 
@@ -444,7 +448,7 @@ type authzRequest struct {
 // validateAuthz checks an authorization request. If the client or the
 // redirect URI are invalid, it returns fatal=true: the error must be shown to
 // the user and NOT redirected (RFC 6749 §4.1.2.1).
-func (a *AuthServer) validateAuthz(q url.Values) (req *authzRequest, errCode, errDesc string, fatal bool) {
+func (a *Server) validateAuthz(q url.Values) (req *authzRequest, errCode, errDesc string, fatal bool) {
 	c, ok := a.lookupClient(q.Get("client_id"))
 	if !ok {
 		return nil, "invalid_client", "unknown client_id", true
@@ -473,14 +477,14 @@ func (a *AuthServer) validateAuthz(q url.Values) (req *authzRequest, errCode, er
 		}
 	}
 	req.resource = a.cfg.Resource
-	req.scope = scopeNews
-	if s := q.Get("scope"); s != "" && !slices.Contains(strings.Fields(s), scopeNews) {
-		return req, "invalid_scope", "the only supported scope is " + scopeNews, false
+	req.scope = Scope
+	if s := q.Get("scope"); s != "" && !slices.Contains(strings.Fields(s), Scope) {
+		return req, "invalid_scope", "the only supported scope is " + Scope, false
 	}
 	return req, "", "", false
 }
 
-func (a *AuthServer) redirectWith(w http.ResponseWriter, r *http.Request, req *authzRequest, params url.Values) {
+func (a *Server) redirectWith(w http.ResponseWriter, r *http.Request, req *authzRequest, params url.Values) {
 	u, _ := url.Parse(req.redirect)
 	q := u.Query()
 	for k, v := range params {
@@ -494,7 +498,7 @@ func (a *AuthServer) redirectWith(w http.ResponseWriter, r *http.Request, req *a
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
-func (a *AuthServer) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
+func (a *Server) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
@@ -565,7 +569,7 @@ func (a *AuthServer) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *AuthServer) allowLoginAttempt() bool {
+func (a *Server) allowLoginAttempt() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	cutoff := time.Now().Add(-loginFailureWindow)
@@ -573,13 +577,13 @@ func (a *AuthServer) allowLoginAttempt() bool {
 	return len(a.failures) < maxLoginFailures
 }
 
-func (a *AuthServer) recordLoginFailure() {
+func (a *Server) recordLoginFailure() {
 	a.mu.Lock()
 	a.failures = append(a.failures, time.Now())
 	a.mu.Unlock()
 }
 
-func (a *AuthServer) issueCode(w http.ResponseWriter, r *http.Request, req *authzRequest) {
+func (a *Server) issueCode(w http.ResponseWriter, r *http.Request, req *authzRequest) {
 	code := a.sign(claims{
 		Typ:   typCode,
 		Cid:   req.client.ID,
@@ -594,7 +598,7 @@ func (a *AuthServer) issueCode(w http.ResponseWriter, r *http.Request, req *auth
 }
 
 // redeemCode marks a code as used; it returns false if it was already used.
-func (a *AuthServer) redeemCode(jti string, exp int64) bool {
+func (a *Server) redeemCode(jti string, exp int64) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := time.Now()
@@ -612,7 +616,7 @@ func (a *AuthServer) redeemCode(jti string, exp int64) bool {
 
 // ---------- token endpoint ----------
 
-func (a *AuthServer) TokenHandler(w http.ResponseWriter, r *http.Request) {
+func (a *Server) TokenHandler(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -691,7 +695,7 @@ func (a *AuthServer) TokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *AuthServer) issueTokens(w http.ResponseWriter, clientID, scope string) {
+func (a *Server) issueTokens(w http.ResponseWriter, clientID, scope string) {
 	now := time.Now()
 	at := a.sign(claims{Typ: typAccess, Cid: clientID, Aud: a.cfg.Resource, Scope: scope, Exp: now.Add(accessTokenTTL).Unix()})
 	rt := a.sign(claims{Typ: typRefresh, Cid: clientID, Aud: a.cfg.Resource, Scope: scope, Exp: now.Add(refreshTokenTTL).Unix()})
