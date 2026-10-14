@@ -1,12 +1,14 @@
-package main
+package server
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -14,11 +16,20 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/mrdev023/mcp-nextcloud-news/internal/config"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/nextcloud/nextcloudtest"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc"
 	"github.com/mrdev023/mcp-nextcloud-news/internal/oidc/oidctest"
 )
+
+type bearerRT struct{ tok string }
+
+func (b bearerRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+b.tok)
+	return http.DefaultTransport.RoundTrip(r)
+}
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
@@ -35,63 +46,72 @@ func setEnv(t *testing.T, kv map[string]string) {
 
 // ---------- tests ----------
 
-func TestLoadConfigModes(t *testing.T) {
-	oidcEnv := map[string]string{
-		"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc",
-		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "news-mcp",
-		"MCP_OIDC_CLIENT_SECRET": "x", "MCP_OIDC_EXCHANGE_AUDIENCE": "nextcloud",
-		"MCP_BASE_URL": "https://news.example",
+// TestOAuthRoutes checks that only the standard discovery documents are
+// served, and that the consent page shows the full redirect URI.
+func TestOAuthRoutes(t *testing.T) {
+	setEnv(t, map[string]string{
+		"NEXTCLOUD_URL": "https://cloud.example", "NEXTCLOUD_USER": "u",
+		"NEXTCLOUD_APP_PASSWORD": "p", "MCP_AUTH_PASSWORD": "correct horse battery",
+	})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
 	}
-	with := func(kv map[string]string) map[string]string {
-		m := map[string]string{}
-		for k, v := range oidcEnv {
-			m[k] = v
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv := httptest.NewServer(NewHandler(cfg, "test", logger, nextcloud.NewClient("https://cloud.example", "u", "p", nil), nil))
+	defer srv.Close()
+
+	for path, want := range map[string]int{
+		"/.well-known/oauth-authorization-server":   http.StatusOK,
+		"/.well-known/oauth-protected-resource/mcp": http.StatusOK,
+		"/.well-known/oauth-protected-resource":     http.StatusOK,
+		"/.well-known/openid-configuration":         http.StatusNotFound,
+		"/mcp/.well-known/oauth-protected-resource": http.StatusNotFound,
+		"/healthz": http.StatusOK,
+	} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
 		}
-		for k, v := range kv {
-			m[k] = v
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("GET %s = %d, want %d", path, resp.StatusCode, want)
 		}
-		return m
 	}
-	cases := []struct {
-		name     string
-		env      map[string]string
-		wantErr  string
-		wantMode string
-		wantAud  string
-	}{
-		{"oidc defaults audience to resource URI", oidcEnv, "", authModeOIDC, "https://news.example/mcp"},
-		{"oidc explicit audience", with(map[string]string{"MCP_OIDC_AUDIENCE": "news-mcp"}), "", authModeOIDC, "news-mcp"},
-		{"oidc missing settings", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc"},
-			"MCP_OIDC_CLIENT_ID, MCP_OIDC_CLIENT_SECRET, MCP_OIDC_EXCHANGE_AUDIENCE, MCP_OIDC_ISSUER", "", ""},
-		{"oidc plain http issuer refused", with(map[string]string{"MCP_OIDC_ISSUER": "http://id.example"}), "https", "", ""},
-		{"oidc http loopback issuer allowed", with(map[string]string{"MCP_OIDC_ISSUER": "http://127.0.0.1:9000/realms/r"}), "", authModeOIDC, ""},
-		{"standalone still needs secrets", map[string]string{"NEXTCLOUD_URL": "https://cloud.example"}, "MCP_AUTH_PASSWORD", "", ""},
-		{"oauth is an alias of standalone", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oauth",
-			"NEXTCLOUD_USER": "u", "NEXTCLOUD_APP_PASSWORD": "p", "MCP_AUTH_PASSWORD": "correct horse battery"}, "", authModeStandalone, ""},
-		{"gateway mode removed", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "gateway"}, "use MCP_AUTH_MODE=oidc", "", ""},
-		{"passthrough mode removed", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "passthrough"}, "use MCP_AUTH_MODE=oidc", "", ""},
-		{"unknown mode", map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "magic"}, "MCP_AUTH_MODE", "", ""},
+
+	// Register a client, then render the consent page.
+	redirect := "http://127.0.0.1:4567/oauth/callback"
+	reg, _ := json.Marshal(map[string]any{"redirect_uris": []string{redirect}, "client_name": "Test client"})
+	resp, err := http.Post(srv.URL+"/register", "application/json", bytes.NewReader(reg))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			setEnv(t, tc.env)
-			cfg, err := loadConfig()
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want it to mention %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if cfg.AuthMode != tc.wantMode {
-				t.Errorf("mode = %q, want %q", cfg.AuthMode, tc.wantMode)
-			}
-			if tc.wantAud != "" && cfg.OIDCAudience != tc.wantAud {
-				t.Errorf("audience = %q, want %q", cfg.OIDCAudience, tc.wantAud)
-			}
-		})
+	var out struct {
+		ClientID string `json:"client_id"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+
+	q := url.Values{
+		"client_id": {out.ClientID}, "redirect_uri": {redirect}, "response_type": {"code"},
+		"code_challenge": {strings.Repeat("a", 43)}, "code_challenge_method": {"S256"},
+	}
+	resp, err = http.Get(srv.URL + "/authorize?" + q.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("authorize page: status %d", resp.StatusCode)
+	}
+	for _, want := range []string{"Test client", redirect, "loopback"} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("consent page does not mention %q", want)
+		}
+	}
+	if resp.Header.Get("X-Frame-Options") != "DENY" {
+		t.Error("consent page can be framed")
 	}
 }
 
@@ -123,11 +143,11 @@ func TestOIDCEndToEnd(t *testing.T) {
 		"MCP_OIDC_ISSUER": f.URL, "MCP_OIDC_AUDIENCE": oidctest.Audience, "MCP_OIDC_CLIENT_ID": oidctest.ClientID,
 		"MCP_OIDC_CLIENT_SECRET": oidctest.ClientSecret, "MCP_OIDC_EXCHANGE_AUDIENCE": oidctest.UpstreamAudience,
 	})
-	cfg, err := loadConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(buildHandler(cfg, logger, nextcloud.NewClient(ncSrv.URL, "", "", ncSrv.Client()), oidc.New(oidc.Config{Issuer: f.URL, Audience: oidctest.Audience, ClientID: oidctest.ClientID, ClientSecret: oidctest.ClientSecret, ExchangeAudience: oidctest.UpstreamAudience, HTTPClient: f.Client(), Logger: logger})))
+	srv := httptest.NewServer(NewHandler(cfg, "test", logger, nextcloud.NewClient(ncSrv.URL, "", "", ncSrv.Client()), oidc.New(oidc.Config{Issuer: f.URL, Audience: oidctest.Audience, ClientID: oidctest.ClientID, ClientSecret: oidctest.ClientSecret, ExchangeAudience: oidctest.UpstreamAudience, HTTPClient: f.Client(), Logger: logger})))
 	defer srv.Close()
 
 	// Protected resource metadata points at the external issuer.

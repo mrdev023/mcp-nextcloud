@@ -1,6 +1,6 @@
 *
 !go.mod
 !go.sum
-!*.go
+!cmd/
 !internal/
 **/*_test.go
