@@ -101,6 +101,33 @@ func TestOIDCKeyRotation(t *testing.T) {
 	}
 }
 
+// TestJWKSRefreshRateLimited checks that tokens signed with unknown keys
+// cannot make news-mcp refetch the JWKS on every request.
+func TestJWKSRefreshRateLimited(t *testing.T) {
+	f := oidctest.NewIDP(t)
+	o := newTestClient(f, nil)
+	ctx := context.Background()
+	if _, err := o.verify(ctx, f.Sign(f.Claims("alice"))); err != nil {
+		t.Fatal(err)
+	}
+	otherKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	for i := range 20 {
+		forged := jwt.NewWithClaims(jwt.SigningMethodRS256, f.Claims("mallory"))
+		forged.Header["kid"] = fmt.Sprintf("unknown-%d", i)
+		s, _ := forged.SignedString(otherKey)
+		if _, err := o.verify(ctx, s); err == nil {
+			t.Fatal("forged token accepted")
+		}
+	}
+	if n := f.JWKSCount(); n != 1 {
+		t.Errorf("JWKS fetched %d times, want 1", n)
+	}
+	// Valid tokens keep working from the cached keys.
+	if _, err := o.verify(ctx, f.Sign(f.Claims("bob"))); err != nil {
+		t.Errorf("valid token rejected after forged ones: %v", err)
+	}
+}
+
 func TestOIDCDiscoveryIssuerMismatch(t *testing.T) {
 	f := oidctest.NewIDP(t)
 	o := New(Config{

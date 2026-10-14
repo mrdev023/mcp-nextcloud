@@ -56,6 +56,7 @@ type IDP struct {
 	ecKey     *ecdsa.PrivateKey
 	exchange  Exchange
 	exchanges int
+	jwksHits  int
 	lastForm  url.Values
 }
 
@@ -90,6 +91,7 @@ func NewIDP(t *testing.T) *IDP {
 func (f *IDP) jwks(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.jwksHits++
 	pub := f.key.PublicKey
 	// Uncompressed point: 0x04 || X (32 bytes) || Y (32 bytes).
 	ecPub, err := f.ecKey.PublicKey.Bytes()
@@ -211,4 +213,11 @@ func (f *IDP) LastForm() url.Values {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// JWKSCount returns the number of JWKS requests served.
+func (f *IDP) JWKSCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.jwksHits
 }

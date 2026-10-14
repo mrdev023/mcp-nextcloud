@@ -12,7 +12,7 @@ news-mcp is a Go module of about 2,800 lines (plus tests): one binary, no databa
 | `internal/tools` | The nine MCP tools: input/output types, validation, error mapping (`mapErr`), HTML-to-text and truncation helpers |
 | `internal/nextcloud` | Nextcloud News API v1-3 client: one method per endpoint, credential selection, response size limit |
 | `internal/standalone` | Standalone mode: the embedded OAuth 2.1 authorization server (metadata, `/register`, `/authorize`, `/token`, token verification) |
-| `internal/oidc` | OIDC mode: discovery, JWKS cache, JWT validation middleware, RFC 8693 token exchange with cache |
+| `internal/oidc` | OIDC mode: JWT validation with go-oidc behind a rate-limited JWKS cache, 401/403 middleware, RFC 8693 token exchange with cache |
 | `internal/httpx` | Small HTTP helpers: bearer token parsing, access log, loopback check |
 | `internal/nextcloud/nextcloudtest`, `internal/oidc/oidctest` | In-process fake Nextcloud News API and fake identity provider, shared by the tests |
 | `docs/` | This documentation |
@@ -108,7 +108,7 @@ Because credentials travel in the request context, a token can never leak from o
   - The HTTP connection pool is small.
   - Idle MCP sessions expire after 30 minutes.
   - Typical RSS is around 15 MB.
-- **Few dependencies.** Only the standard library, the MCP SDK and `golang-jwt/jwt` (already a dependency of the SDK). HTML-to-text conversion uses a few regular expressions instead of an HTML parser.
+- **Few dependencies.** The standard library, the MCP SDK, and in OIDC mode `coreos/go-oidc` with `go-jose` for token verification, rather than hand-written JWK and signature code. HTML-to-text conversion uses a few regular expressions instead of an HTML parser.
 - **Secrets stay out of logs.** The access log records method, path, status and duration, never headers. Token exchange errors log only the provider's `error` / `error_description`.
 
 ## News API specifics
@@ -133,7 +133,7 @@ go test ./...
 | `internal/nextcloud` | Every client method against a fake Nextcloud (`nextcloudtest`): query strings, request bodies, 401/404/500 mapping, no password in errors, credential selection from the context |
 | `internal/tools` | Every tool through an in-memory MCP session and a fake client: parameters, validation, paging, error messages, annotations; schema snapshots in `testdata/toolsnaps` |
 | `internal/standalone` | Standalone end to end: registration, consent, PKCE, code replay, refresh, MCP session with tool calls; resource matching |
-| `internal/oidc` | JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, discovery issuer mismatch, token exchange and its bounded cache |
+| `internal/oidc` | JWT acceptance and rejection (audience, issuer, signature, expiry, `none`/HS256), key rotation, JWKS refresh rate limit, discovery issuer mismatch, token exchange and its bounded cache |
 | `internal/config` | Configuration validation for both authentication modes |
 | `internal/server` | Discovery routes and consent page; OIDC end to end with two users through the real handler, no secrets in logs |
 | `internal/httpx` | Bearer token parsing |

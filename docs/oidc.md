@@ -147,19 +147,20 @@ mcp:
 flowchart TD
     A[Request on /mcp] --> B{Authorization: Bearer?}
     B -- no --> R1["401<br/>WWW-Authenticate: Bearer resource_metadata=…"]
-    B -- yes --> C{"Signature valid?<br/>(JWKS, kid, RS/PS/ES/EdDSA only)"}
-    C -- unknown kid --> K[Refresh JWKS<br/>at most every 30 s] --> C
+    B -- yes --> C{"Signature valid?<br/>(JWKS keys, RS/PS/ES/EdDSA only)"}
+    C -- unknown key --> K[Refresh JWKS<br/>at most every 30 s] --> C
     C -- no --> R2["401 error=invalid_token"]
-    C -- yes --> D{"iss = MCP_OIDC_ISSUER<br/>aud ∋ MCP_OIDC_AUDIENCE<br/>exp / nbf ± 30 s"}
+    C -- yes --> D{"iss = MCP_OIDC_ISSUER<br/>aud ∋ MCP_OIDC_AUDIENCE<br/>exp (+30 s), nbf (+5 min)"}
     D -- no --> R2
     D -- yes --> E{Required scopes present?}
     E -- no --> R3["403 error=insufficient_scope"]
     E -- yes --> F[MCP request handled<br/>session bound to iss + sub]
 ```
 
-- **Keys.** The JWKS is cached and refreshed every hour. An unknown key id triggers a refresh, so key rotation works without a restart.
+- **Library.** Discovery and token verification use [go-oidc](https://github.com/coreos/go-oidc), and JWKS parsing uses go-jose.
+- **Keys.** The JWKS is cached and refreshed every hour. A token signed with an unknown key triggers a refresh, so key rotation works without a restart. Refreshes are limited to one every 30 s, so forged tokens cannot make news-mcp flood the identity provider (go-oidc's own key set would refetch on every one).
 - **Algorithms.** Only asymmetric algorithms are accepted; `none` and `HS*` are always refused.
-- **Claims.** `exp` is mandatory.
+- **Claims.** `exp` is mandatory. Clock skew is tolerated up to 30 s on `exp` and, as go-oidc does, up to 5 minutes on `nbf`.
 - **No shared account.** `NEXTCLOUD_USER` / `NEXTCLOUD_APP_PASSWORD` are ignored, so there is no shared account to fall back on.
 
 ## How the exchange behaves

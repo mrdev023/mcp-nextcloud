@@ -13,18 +13,16 @@ package oidc
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"net/url"
 	"slices"
@@ -32,7 +30,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -55,13 +54,11 @@ const (
 	grantTokenExchange   = "urn:ietf:params:oauth:grant-type:token-exchange"
 )
 
-// jwksMinRefresh rate-limits JWKS refreshes triggered by unknown kids (a
+// jwksMinRefresh rate-limits JWKS refreshes triggered by unknown keys (a
 // variable so tests can disable it).
 var jwksMinRefresh = 30 * time.Second
 
-var errNoKey = errors.New("no matching signing key")
-
-var b64 = base64.RawURLEncoding
+var errNoKey = errors.New("no usable signing key")
 
 // Config configures the OIDC resource server and token exchange.
 type Config struct {
@@ -78,21 +75,21 @@ type Config struct {
 
 // Client validates incoming access tokens and exchanges them for Nextcloud tokens.
 type Client struct {
-	cfg Config
+	cfg      Config
+	verifier *oidc.IDTokenVerifier
 
 	mu          sync.Mutex
-	discovered  *oidcDiscovery
+	discovered  *discoveryDoc
 	lastDiscErr time.Time
-	keys        map[string]any // kid -> public key
-	keysAt      time.Time      // last successful JWKS fetch
-	keysTried   time.Time      // last JWKS fetch attempt
+	keys        *oidc.StaticKeySet // nil until the first JWKS fetch
+	keysAt      time.Time          // last successful JWKS fetch
+	keysTried   time.Time          // last JWKS fetch attempt
 	cache       map[[32]byte]cachedToken
 }
 
-type oidcDiscovery struct {
-	Issuer        string `json:"issuer"`
-	JWKSURI       string `json:"jwks_uri"`
-	TokenEndpoint string `json:"token_endpoint"`
+type discoveryDoc struct {
+	JWKSURI       string
+	TokenEndpoint string
 }
 
 type cachedToken struct {
@@ -105,7 +102,18 @@ func New(cfg Config) *Client {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Client{cfg: cfg, cache: map[[32]byte]cachedToken{}}
+	o := &Client{cfg: cfg, cache: map[[32]byte]cachedToken{}}
+	// go-oidc checks the signature (asymmetric algorithms only), iss, aud
+	// (which must contain our audience), exp (required) and nbf. Its ID token
+	// verifier works for JWT access tokens too.
+	o.verifier = oidc.NewVerifier(cfg.Issuer, keySet{o}, &oidc.Config{
+		ClientID:             cfg.Audience,
+		SupportedSigningAlgs: allowedJWTAlgs,
+		// Tolerate jwtLeeway of clock skew on exp. go-oidc already allows
+		// 5 minutes on nbf.
+		Now: func() time.Time { return time.Now().Add(-jwtLeeway) },
+	})
+	return o
 }
 
 // ---------- discovery and JWKS ----------
@@ -127,9 +135,10 @@ func (o *Client) getJSON(ctx context.Context, u string, out any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, idpBodyLimit)).Decode(out)
 }
 
-// discovery returns the issuer's OpenID Provider metadata, fetched once and
+// discovery returns the issuer's OpenID Provider metadata, fetched once with
+// go-oidc (which checks that its issuer matches MCP_OIDC_ISSUER exactly) and
 // retried at most every discoveryRetry on failure.
-func (o *Client) discovery(ctx context.Context) (*oidcDiscovery, error) {
+func (o *Client) discovery(ctx context.Context) (*discoveryDoc, error) {
 	o.mu.Lock()
 	if d := o.discovered; d != nil {
 		o.mu.Unlock()
@@ -141,10 +150,14 @@ func (o *Client) discovery(ctx context.Context) (*oidcDiscovery, error) {
 	}
 	o.mu.Unlock()
 
-	var d oidcDiscovery
-	err := o.getJSON(ctx, strings.TrimRight(o.cfg.Issuer, "/")+"/.well-known/openid-configuration", &d)
-	if err == nil && d.Issuer != o.cfg.Issuer {
-		err = fmt.Errorf("discovery document issuer %q does not match MCP_OIDC_ISSUER", d.Issuer)
+	d := &discoveryDoc{}
+	p, err := oidc.NewProvider(oidc.ClientContext(ctx, o.cfg.HTTPClient), o.cfg.Issuer)
+	if err == nil {
+		var meta struct {
+			JWKSURI string `json:"jwks_uri"`
+		}
+		err = p.Claims(&meta)
+		d.JWKSURI, d.TokenEndpoint = meta.JWKSURI, p.Endpoint().TokenURL
 	}
 	if err == nil && (d.JWKSURI == "" || d.TokenEndpoint == "") {
 		err = errors.New("discovery document lacks jwks_uri or token_endpoint")
@@ -156,165 +169,102 @@ func (o *Client) discovery(ctx context.Context) (*oidcDiscovery, error) {
 		o.cfg.Logger.Error("OIDC discovery failed", "issuer", o.cfg.Issuer, "error", err)
 		return nil, err
 	}
-	o.discovered = &d
-	return &d, nil
+	o.discovered = d
+	return d, nil
 }
 
-type jwk struct {
-	Kty string `json:"kty"`
-	Kid string `json:"kid"`
-	Use string `json:"use"`
-	Crv string `json:"crv"`
-	N   string `json:"n"`
-	E   string `json:"e"`
-	X   string `json:"x"`
-	Y   string `json:"y"`
-}
-
-func (k *jwk) publicKey() (any, error) {
-	dec := b64.DecodeString
-	switch k.Kty {
-	case "RSA":
-		n, err1 := dec(k.N)
-		e, err2 := dec(k.E)
-		if err1 != nil || err2 != nil || len(e) == 0 || len(e) > 4 {
-			return nil, errors.New("bad RSA key")
-		}
-		return &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(new(big.Int).SetBytes(e).Int64())}, nil
-	case "EC":
-		var curve elliptic.Curve
-		switch k.Crv {
-		case "P-256":
-			curve = elliptic.P256()
-		case "P-384":
-			curve = elliptic.P384()
-		case "P-521":
-			curve = elliptic.P521()
-		default:
-			return nil, fmt.Errorf("unsupported curve %q", k.Crv)
-		}
-		x, err1 := dec(k.X)
-		y, err2 := dec(k.Y)
-		size := (curve.Params().BitSize + 7) / 8
-		if err1 != nil || err2 != nil || len(x) > size || len(y) > size {
-			return nil, errors.New("bad EC key")
-		}
-		pt := make([]byte, 1+2*size)
-		pt[0] = 4
-		copy(pt[1+size-len(x):1+size], x)
-		copy(pt[1+2*size-len(y):], y)
-		return ecdsa.ParseUncompressedPublicKey(curve, pt)
-	case "OKP":
-		x, err := dec(k.X)
-		if k.Crv != "Ed25519" || err != nil || len(x) != ed25519.PublicKeySize {
-			return nil, errors.New("bad OKP key")
-		}
-		return ed25519.PublicKey(x), nil
-	}
-	return nil, fmt.Errorf("unsupported key type %q", k.Kty)
-}
-
+// refreshKeys fetches the JWKS. go-jose parses the keys; entries that are not
+// public signature keys, or that it cannot parse, are skipped.
 func (o *Client) refreshKeys(ctx context.Context) error {
 	d, err := o.discovery(ctx)
 	if err != nil {
 		return err
 	}
 	var set struct {
-		Keys []jwk `json:"keys"`
+		Keys []json.RawMessage `json:"keys"`
 	}
 	if err := o.getJSON(ctx, d.JWKSURI, &set); err != nil {
 		return err
 	}
-	keys := map[string]any{}
-	for i := range set.Keys {
-		k := &set.Keys[i]
-		if k.Use != "" && k.Use != "sig" {
+	var keys []crypto.PublicKey
+	for _, raw := range set.Keys {
+		var k jose.JSONWebKey
+		if err := k.UnmarshalJSON(raw); err != nil || (k.Use != "" && k.Use != "sig") {
 			continue
 		}
-		pk, err := k.publicKey()
-		if err != nil {
-			continue
+		switch k.Key.(type) {
+		case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey:
+			keys = append(keys, k.Key)
 		}
-		keys[k.Kid] = pk
 	}
 	if len(keys) == 0 {
 		return errors.New("JWKS contains no usable signing key")
 	}
 	o.mu.Lock()
-	o.keys, o.keysAt = keys, time.Now()
+	o.keys, o.keysAt = &oidc.StaticKeySet{PublicKeys: keys}, time.Now()
 	o.mu.Unlock()
 	return nil
 }
 
-// key returns the verification key for kid, refreshing the JWKS when it is
-// stale or when an unknown kid shows up (key rotation), rate-limited.
-func (o *Client) key(ctx context.Context, kid string) (any, error) {
-	lookup := func() (any, bool) {
-		if k, ok := o.keys[kid]; ok {
-			return k, true
-		}
-		if kid == "" && len(o.keys) == 1 {
-			for _, k := range o.keys {
-				return k, true
-			}
-		}
-		return nil, false
-	}
+// keySet is the oidc.KeySet of a Client. Unlike go-oidc's RemoteKeySet, which
+// refetches the JWKS for every token whose signature does not verify, it
+// refreshes at most every jwksMinRefresh, so unauthenticated requests with
+// forged tokens cannot make news-mcp hammer the identity provider. It also
+// refreshes a JWKS older than jwksMaxAge, so removed keys stop being trusted.
+type keySet struct{ o *Client }
+
+func (k keySet) VerifySignature(ctx context.Context, raw string) ([]byte, error) {
+	o := k.o
 	o.mu.Lock()
-	k, found := lookup()
-	stale := time.Since(o.keysAt) > jwksMaxAge
+	keys, stale := o.keys, time.Since(o.keysAt) > jwksMaxAge
+	o.mu.Unlock()
+	if keys != nil && !stale {
+		if payload, err := keys.VerifySignature(ctx, raw); err == nil {
+			return payload, nil
+		}
+	}
+
+	// Unknown key (rotation) or stale set: refresh, rate-limited.
+	o.mu.Lock()
 	canTry := time.Since(o.keysTried) > jwksMinRefresh
-	if (stale || !found) && canTry {
+	if canTry {
 		o.keysTried = time.Now()
-	} else {
-		canTry = false
 	}
 	o.mu.Unlock()
-
 	if canTry {
 		if err := o.refreshKeys(ctx); err != nil {
 			o.cfg.Logger.Warn("JWKS refresh failed", "error", err)
 		}
-		o.mu.Lock()
-		k, found = lookup()
-		o.mu.Unlock()
 	}
-	if !found {
+
+	o.mu.Lock()
+	keys = o.keys
+	o.mu.Unlock()
+	if keys == nil {
 		return nil, errNoKey
 	}
-	return k, nil
+	return keys.VerifySignature(ctx, raw)
 }
 
 // ---------- incoming token validation ----------
 
 // verify validates a JWT access token issued for this server.
 func (o *Client) verify(ctx context.Context, raw string) (*auth.TokenInfo, error) {
-	parser := jwt.NewParser(
-		jwt.WithValidMethods(allowedJWTAlgs),
-		jwt.WithIssuer(o.cfg.Issuer),
-		jwt.WithAudience(o.cfg.Audience),
-		jwt.WithExpirationRequired(),
-		jwt.WithLeeway(jwtLeeway),
-	)
-	claims := jwt.MapClaims{}
-	_, err := parser.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {
-		kid, _ := t.Header["kid"].(string)
-		return o.key(ctx, kid)
-	})
+	tok, err := o.verifier.Verify(ctx, raw)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", auth.ErrInvalidToken, err)
 	}
-	exp, _ := claims.GetExpirationTime()
-	sub, _ := claims.GetSubject()
-	var scopes []string
-	if s, ok := claims["scope"].(string); ok {
-		scopes = strings.Fields(s)
+	var claims struct {
+		Scope string `json:"scope"`
+	}
+	if err := tok.Claims(&claims); err != nil {
+		return nil, fmt.Errorf("%w: %w", auth.ErrInvalidToken, err)
 	}
 	return &auth.TokenInfo{
-		Scopes:     scopes,
-		Expiration: exp.Time,
+		Scopes:     strings.Fields(claims.Scope),
+		Expiration: tok.Expiry,
 		// Binds MCP sessions to the user (SDK session-hijacking protection).
-		UserID: o.cfg.Issuer + "|" + sub,
+		UserID: o.cfg.Issuer + "|" + tok.Subject,
 	}, nil
 }
 
