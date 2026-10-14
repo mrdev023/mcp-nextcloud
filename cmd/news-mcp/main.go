@@ -84,7 +84,7 @@ func run() error {
 	defer stop()
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	attrs := []any{"addr", srv.Addr, "auth_mode", cfg.AuthMode, "mcp_endpoint", cfg.BaseURL.String() + "/mcp", "nextcloud", cfg.NextcloudURL}
+	attrs := []any{"addr", srv.Addr, "auth_mode", cfg.AuthMode, "read_only", cfg.ReadOnly, "mcp_endpoint", cfg.BaseURL.String() + "/mcp", "nextcloud", cfg.NextcloudURL}
 	if idp != nil {
 		attrs = append(attrs, "oidc_issuer", cfg.OIDCIssuer, "oidc_audience", cfg.OIDCAudience,
 			"exchange_audience", cfg.OIDCExchangeAudience, "oidc_client_id", cfg.OIDCClientID)

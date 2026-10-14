@@ -55,7 +55,7 @@ func TestEndToEnd(t *testing.T) {
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
-	tools.Register(server, nc)
+	tools.Register(server, nc, tools.Options{})
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 	mux.Handle("/mcp", auth.RequireBearerToken(as.VerifyAccessToken, &auth.RequireBearerTokenOptions{Scopes: []string{Scope}})(h))
 	mux.HandleFunc("/register", as.RegisterHandler)

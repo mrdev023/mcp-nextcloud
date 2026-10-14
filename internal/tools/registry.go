@@ -80,9 +80,19 @@ func inventory(api NewsAPI) []serverTool {
 	}
 }
 
-// Register adds every news_* tool to s.
-func Register(s *mcp.Server, api NewsAPI) {
+// Options selects the tools Register adds.
+type Options struct {
+	// ReadOnly leaves out every tool that changes News data, so that the
+	// server can only browse articles.
+	ReadOnly bool
+}
+
+// Register adds the news_* tools selected by opts to s.
+func Register(s *mcp.Server, api NewsAPI, opts Options) {
 	for _, st := range inventory(api) {
+		if opts.ReadOnly && st.effect != readOnly {
+			continue
+		}
 		st.register(s)
 	}
 }

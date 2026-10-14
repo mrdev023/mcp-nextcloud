@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"strings"
 	"testing"
 )
@@ -10,7 +11,7 @@ func setEnv(t *testing.T, kv map[string]string) {
 	for _, k := range []string{"NEXTCLOUD_URL", "NEXTCLOUD_USER", "NEXTCLOUD_APP_PASSWORD", "MCP_AUTH_PASSWORD",
 		"MCP_AUTH_MODE", "MCP_BASE_URL", "MCP_PORT", "MCP_OAUTH_CLIENT_ID", "MCP_OAUTH_DCR", "LOG_LEVEL",
 		"MCP_OIDC_ISSUER", "MCP_OIDC_AUDIENCE", "MCP_OIDC_REQUIRED_SCOPES", "MCP_OIDC_CLIENT_ID",
-		"MCP_OIDC_CLIENT_SECRET", "MCP_OIDC_EXCHANGE_AUDIENCE", "MCP_OIDC_EXCHANGE_SCOPE"} {
+		"MCP_OIDC_CLIENT_SECRET", "MCP_OIDC_EXCHANGE_AUDIENCE", "MCP_OIDC_EXCHANGE_SCOPE", "MCP_READ_ONLY"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range kv {
@@ -77,5 +78,32 @@ func TestLoadConfigModes(t *testing.T) {
 				t.Errorf("audience = %q, want %q", cfg.OIDCAudience, tc.wantAud)
 			}
 		})
+	}
+}
+
+func TestReadOnly(t *testing.T) {
+	base := map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "NEXTCLOUD_USER": "u",
+		"NEXTCLOUD_APP_PASSWORD": "p", "MCP_AUTH_PASSWORD": "correct horse battery"}
+	for value, want := range map[string]bool{"": false, "false": false, "true": true, "1": true} {
+		env := maps.Clone(base)
+		env["MCP_READ_ONLY"] = value
+		setEnv(t, env)
+		cfg, err := Load()
+		if err != nil || cfg.ReadOnly != want {
+			t.Errorf("MCP_READ_ONLY=%q: ReadOnly = %v, err = %v; want %v", value, cfg != nil && cfg.ReadOnly, err, want)
+		}
+	}
+	// Also honoured in OIDC mode, which returns early from Load.
+	setEnv(t, map[string]string{"NEXTCLOUD_URL": "https://cloud.example", "MCP_AUTH_MODE": "oidc",
+		"MCP_OIDC_ISSUER": "https://id.example/realms/r", "MCP_OIDC_CLIENT_ID": "news-mcp",
+		"MCP_OIDC_CLIENT_SECRET": "x", "MCP_OIDC_EXCHANGE_AUDIENCE": "nextcloud", "MCP_READ_ONLY": "true"})
+	if cfg, err := Load(); err != nil || !cfg.ReadOnly {
+		t.Errorf("oidc mode: cfg = %+v, err = %v", cfg, err)
+	}
+	env := maps.Clone(base)
+	env["MCP_READ_ONLY"] = "maybe"
+	setEnv(t, env)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MCP_READ_ONLY must be true or false") {
+		t.Errorf("invalid value: err = %v", err)
 	}
 }

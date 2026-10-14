@@ -10,6 +10,7 @@ news-mcp is configured with environment variables only.
 | `NEXTCLOUD_URL` | yes | Nextcloud base URL, e.g. `https://cloud.example.com` |
 | `MCP_BASE_URL` | no | Public URL of this server; `$MCP_BASE_URL/mcp` is the resource URI. Default `http://localhost:$MCP_PORT` |
 | `MCP_PORT` | no | Listen port, default `8080` |
+| `MCP_READ_ONLY` | no | `true` exposes only the read-only tools (`news_list_feeds`, `news_list_items`, `news_get_item`, `news_get_updated`); default `false` |
 | `LOG_LEVEL` | no | `debug`, `info` (default), `warn`, `error` |
 | `GOMEMLIMIT` | no | Go runtime soft memory limit; 32 MiB by default |
 

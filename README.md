@@ -71,6 +71,7 @@ docker run -d -p 8080:8080 \
 
 - **Pagination.** In the News API, `offset` is an **article id**, not a count. Pass back the `nextOffset` returned by the previous page; `nextOffset: 0` means there are no more pages.
 - **Bodies.** List tools return a 280-character excerpt, or the body truncated to 2,000 characters with `includeBody`. `news_get_item` returns plain text truncated to 20,000 characters by default.
+- **Read-only mode.** With `MCP_READ_ONLY=true`, only the four read-only tools are exposed: the server can browse articles but never change their state.
 
 ## Development
 

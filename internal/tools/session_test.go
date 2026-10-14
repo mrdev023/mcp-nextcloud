@@ -2,18 +2,25 @@ package tools
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// connect registers the tools on a fresh server and returns a client session
-// connected to it through in-memory transports.
+// connect registers every tool on a fresh server and returns a client
+// session connected to it through in-memory transports.
 func connect(t *testing.T, api NewsAPI) *mcp.ClientSession {
+	t.Helper()
+	return connectWith(t, api, Options{})
+}
+
+// connectWith is connect with registration options.
+func connectWith(t *testing.T, api NewsAPI, opts Options) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-	Register(s, api)
+	Register(s, api, opts)
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := s.Connect(ctx, st, nil)
 	if err != nil {
@@ -65,5 +72,23 @@ func TestAnnotations(t *testing.T) {
 			// must always set it.
 			t.Errorf("%s: destructiveHint = %v, idempotentHint = %v, want %v, true", tl.Name, a.DestructiveHint, a.IdempotentHint, w.destructive)
 		}
+	}
+}
+
+func TestReadOnlyOption(t *testing.T) {
+	res, err := connectWith(t, nil, Options{ReadOnly: true}).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, tl := range res.Tools {
+		names = append(names, tl.Name)
+		if !tl.Annotations.ReadOnlyHint {
+			t.Errorf("%s is not read-only", tl.Name)
+		}
+	}
+	slices.Sort(names)
+	if want := []string{"news_get_item", "news_get_updated", "news_list_feeds", "news_list_items"}; !slices.Equal(names, want) {
+		t.Errorf("tools = %v, want %v", names, want)
 	}
 }

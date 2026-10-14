@@ -28,15 +28,19 @@ func NewHandler(cfg *config.Config, version string, log *slog.Logger, nc *nextcl
 	resource := issuer + "/mcp"
 	prmURL := cfg.BaseURL.Scheme + "://" + cfg.BaseURL.Host + "/.well-known/oauth-protected-resource" + basePath + "/mcp"
 
+	instructions := "Tools to browse Nextcloud News articles and manage their read/unread and starred state. "
+	if cfg.ReadOnly {
+		instructions = "Read-only tools to browse Nextcloud News articles. "
+	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "nextcloud-news", Title: "Nextcloud News", Version: version}, &mcp.ServerOptions{
-		Instructions: "Tools to browse Nextcloud News articles and manage their read/unread and starred state. " +
+		Instructions: instructions +
 			"Start with news_list_items (unread only by default) or news_list_feeds; use news_get_item for full text.",
 		Logger: log,
 	})
 	if idp != nil {
 		server.AddReceivingMiddleware(idp.ExchangeMiddleware())
 	}
-	tools.Register(server, nc)
+	tools.Register(server, nc, tools.Options{ReadOnly: cfg.ReadOnly})
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Logger:         log,

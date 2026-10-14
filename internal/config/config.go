@@ -37,6 +37,8 @@ type Config struct {
 	AllowDCR      bool
 	SigningKey    []byte
 	LogLevel      slog.Level
+	// ReadOnly exposes only the tools that do not change News data.
+	ReadOnly bool
 
 	// OIDC mode.
 	OIDCIssuer           string
@@ -118,6 +120,11 @@ func Load() (*Config, error) {
 		return nil, errors.New("MCP_PORT must be a valid port number")
 	}
 	c.Port = port
+
+	c.ReadOnly, err = strconv.ParseBool(env("MCP_READ_ONLY", "false"))
+	if err != nil {
+		return nil, errors.New("MCP_READ_ONLY must be true or false")
+	}
 
 	base := strings.TrimRight(env("MCP_BASE_URL", fmt.Sprintf("http://localhost:%d", port)), "/")
 	c.BaseURL, err = url.Parse(base)
